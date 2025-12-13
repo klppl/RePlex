@@ -6,6 +6,7 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const userId = searchParams.get('userId');
         const year = searchParams.get('year');
+        const refresh = searchParams.get('refresh') === 'true';
 
         if (!userId) {
             return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
@@ -13,7 +14,10 @@ export async function GET(request: Request) {
 
         const stats = await getStats(
             Number(userId),
-            year ? Number(year) : undefined
+            year ? Number(year) : undefined,
+            undefined,
+            undefined,
+            { forceRefresh: refresh }
         );
 
         return NextResponse.json(stats);

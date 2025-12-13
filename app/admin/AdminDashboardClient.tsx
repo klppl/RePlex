@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AdminUserType, deleteUser, purgeSystem, saveSystemConfig, generateUserStats, generateAllStats, syncTautulliUsers } from '@/lib/actions/admin';
 import { formatDistanceToNow } from 'date-fns';
 
-type AdminView = 'users' | 'settings' | 'setup';
+type AdminView = 'users' | 'settings' | 'setup' | 'login';
 
 interface Props {
     initialUsers: AdminUserType[];
@@ -13,14 +13,19 @@ interface Props {
         initialized: boolean;
         hasAdmin: boolean;
         config: any;
+        aiConfig: any;
     };
+    isAuthenticated: boolean;
 }
 
-export default function AdminDashboardClient({ initialUsers, status }: Props) {
+export default function AdminDashboardClient({ initialUsers, status, isAuthenticated }: Props) {
     const router = useRouter();
 
     // View State
-    const [view, setView] = useState<AdminView>(status.initialized ? 'users' : 'setup');
+    const [view, setView] = useState<AdminView>(
+        !status.initialized ? 'setup' :
+            (!isAuthenticated ? 'login' : 'users')
+    );
     const [users, setUsers] = useState(initialUsers);
 
     useEffect(() => {
@@ -44,6 +49,10 @@ export default function AdminDashboardClient({ initialUsers, status }: Props) {
     // Setup/Config State
     const [configLoading, setConfigLoading] = useState(false);
     const [configError, setConfigError] = useState('');
+
+    // Login State
+    const [loginLoading, setLoginLoading] = useState(false);
+    const [loginError, setLoginError] = useState('');
 
     // --- HANDLERS ---
 
@@ -126,7 +135,44 @@ export default function AdminDashboardClient({ initialUsers, status }: Props) {
         } else {
             setConfigError(res.error || "Failed to save settings");
         }
-        setConfigLoading(false);
+    };
+
+    const handleLogout = async () => {
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+            window.location.href = '/';
+        } catch (e) {
+            window.location.href = '/';
+        }
+    };
+
+
+
+    const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        setLoginLoading(true);
+        setLoginError('');
+
+        const formData = new FormData(e.currentTarget);
+        const data = Object.fromEntries(formData);
+
+        try {
+            const res = await fetch('/api/auth/admin/login', {
+                method: 'POST',
+                body: JSON.stringify(data),
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (res.ok) {
+                window.location.reload();
+            } else {
+                const json = await res.json();
+                setLoginError(json.error || 'Login failed');
+            }
+        } catch (e) {
+            setLoginError('An error occurred');
+        }
+        setLoginLoading(false);
     };
 
     // --- RENDER HELPERS ---
@@ -135,13 +181,13 @@ export default function AdminDashboardClient({ initialUsers, status }: Props) {
         <div className="flex items-center justify-between border-b border-slate-800 pb-8">
             <div>
                 <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
-                    {view === 'setup' ? 'Welcome to RePlex' : 'Admin Dashboard'}
+                    {view === 'setup' ? 'Welcome to RePlex' : (view === 'login' ? 'SysAdmin Access' : 'Admin Dashboard')}
                 </h1>
                 <p className="text-slate-400 mt-2">
-                    {view === 'setup' ? 'Let\'s get your system configured.' : 'Manage users and system data.'}
+                    {view === 'setup' ? 'Let\'s get your system configured.' : (view === 'login' ? 'Identify yourself.' : 'Manage users and system data.')}
                 </p>
             </div>
-            {view !== 'setup' && (
+            {view !== 'setup' && view !== 'login' && (
                 <div className="flex gap-3">
                     <button
                         onClick={handleSync}
@@ -173,13 +219,19 @@ export default function AdminDashboardClient({ initialUsers, status }: Props) {
                     >
                         Back to Home
                     </button>
+                    <button
+                        onClick={handleLogout}
+                        className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 rounded-lg text-sm font-bold transition"
+                    >
+                        Logout
+                    </button>
                 </div>
             )}
         </div>
     );
 
     const renderNav = () => {
-        if (view === 'setup') return null;
+        if (view === 'setup' || view === 'login') return null;
         return (
             <div className="flex gap-4 border-b border-slate-800/50 pb-1">
                 <button
@@ -361,10 +413,26 @@ export default function AdminDashboardClient({ initialUsers, status }: Props) {
                         <input name="rootPath" defaultValue={status.config?.rootPath} placeholder="/tautulli" className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none transition" />
                     </div>
                     <div className="flex items-center gap-3">
-                        <input type="checkbox" name="useSsl" id="useSsl" defaultChecked={status.config?.useSsl} className="w-5 h-5 rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-900" />
                         <label htmlFor="useSsl" className="text-slate-300 select-none cursor-pointer">Use SSL (HTTPS)</label>
                     </div>
                 </div>
+
+                {/* AI Configuration */}
+                <div className="space-y-6 pt-6 border-t border-slate-800">
+                    <h3 className="text-lg font-bold text-purple-400 uppercase tracking-widest text-xs border-b border-slate-800 pb-2">AI Summary Configuration</h3>
+                    <div className="flex items-center gap-3">
+                        <input type="checkbox" name="aiEnabled" id="aiEnabled" defaultChecked={status.aiConfig?.enabled} className="w-5 h-5 rounded bg-slate-800 border-slate-700 text-purple-500 focus:ring-purple-500 focus:ring-offset-slate-900" />
+                        <label htmlFor="aiEnabled" className="text-slate-300 select-none cursor-pointer">Enable AI Summary</label>
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">OpenAI API Key</label>
+                        <input name="aiKey" type="password" defaultValue={status.aiConfig?.apiKey || ''} placeholder="sk-..." className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-purple-500 outline-none transition" />
+                        <p className="text-xs text-slate-600">Key is stored locally in your database.</p>
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Custom Instructions / Persona</label>
+                        <textarea name="aiInstructions" defaultValue={status.aiConfig?.instructions || "Analyze the user’s Plex statistics and produce a brutally honest /r/roastme-style roast. Be mean, dry, and sarcastic. No empathy, no disclaimers, no praise unless it is immediately undercut. Treat the stats as evidence of bad habits, questionable taste, avoidance of sleep, commitment issues, nostalgia addiction, or fake “good taste.” If data is missing, infer something unflattering. Write one or two short paragraphs that summarize the user as a person based solely on their viewing behavior. No emojis, no self-reference, no moral lessons. Roast choices and habits only, not protected traits. The result should be funny, uncomfortable, and very shareable."} placeholder="Analyze the user’s Plex statistics and produce a brutally honest /r/roastme-style roast..." rows={5} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-purple-500 outline-none transition" />
+                    </div>                </div>
 
                 {/* Admin Account - Only if Setup Mode (Creating New) */}
                 {view === 'setup' && !status.hasAdmin && (
@@ -394,6 +462,38 @@ export default function AdminDashboardClient({ initialUsers, status }: Props) {
         </div>
     );
 
+    const renderLogin = () => (
+        <div className="max-w-md mx-auto animate-in fade-in duration-300 relative">
+            <div className="absolute inset-0 bg-emerald-500/10 blur-3xl rounded-full"></div>
+            <form onSubmit={handleLogin} className="relative bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-xl space-y-6">
+                <div className="text-center mb-8">
+                    <div className="w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4 shadow-inner">
+                        🔐
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Username</label>
+                    <input name="username" required autoFocus className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none transition" />
+                </div>
+                <div className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Password</label>
+                    <input name="password" type="password" required className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none transition" />
+                </div>
+
+                {loginError && (
+                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-sm text-center">
+                        {loginError}
+                    </div>
+                )}
+
+                <button type="submit" disabled={loginLoading} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-emerald-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition transform active:scale-[0.99]">
+                    {loginLoading ? 'Authenticating...' : 'Unlock System'}
+                </button>
+            </form>
+        </div>
+    );
+
     return (
         <div className="min-h-screen bg-slate-950 text-white p-8">
             <div className="max-w-6xl mx-auto space-y-8">
@@ -401,6 +501,7 @@ export default function AdminDashboardClient({ initialUsers, status }: Props) {
                 {renderNav()}
 
                 {view === 'users' && renderUsers()}
+                {view === 'login' && renderLogin()}
                 {(view === 'settings' || view === 'setup') && renderSettings()}
             </div>
         </div>

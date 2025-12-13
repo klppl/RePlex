@@ -31,6 +31,7 @@ export interface StatsResult {
         topPlatforms: { platform: string; count: number }[];
     };
     commitmentIssues: { count: number; titles: string[] };
+    aiSummary?: string;
 }
 
 export async function getStats(userId: number, year?: number, from?: Date, to?: Date, options: { forceRefresh?: boolean } = {}): Promise<StatsResult> {
@@ -43,6 +44,8 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     // If specific range dates are passed, we might skip cache or need smarter cache keys.
     // For now, assuming cache is for the "Standard View" (Current Year / Default).
     // Actually, the user object holds ONE cache string. It probably represents the "Main Dashboard" view.
+
+    const aiConfig = await db.aiConfig.findFirst();
 
     if (!options.forceRefresh) {
         const user = await db.user.findUnique({
@@ -368,6 +371,56 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         topShowByEpisodes = { title: raw.grandparentTitle || "Unknown", count: raw._count.id || 0 };
     }
 
+    // --- AI SUMMARY GENERATION ---
+    let aiSummary = undefined;
+
+    const hasData = totalSeconds > 0;
+
+    // Check if we need to generate AI:
+    // 1. Enabled & Key exists
+    // 2. AND (Force Refresh OR Cache matched but lacked summary)
+    // Note: If we are here, we are either force refreshing OR we fell through from the cache check because summary was missing.
+    // So we can just check if enabled.
+
+    if (aiConfig?.enabled && aiConfig.apiKey && (hasData || options.forceRefresh)) {
+        console.log("Generating AI Summary...");
+        try {
+            const OpenAI = require("openai");
+            const openai = new OpenAI({ apiKey: aiConfig.apiKey });
+
+            const statsContext = {
+                user: { id: userId, year },
+                totalDuration,
+                topMovies: topMovies, // Send all top 10
+                lazyDay,
+                vibe: activityType,
+                stan: yourStan, // Send all top 3
+                genreWheel,
+                binge: bingeRecord,
+                commitmentIssues: { count: uncommittedCount, titles: uncommittedTitles }, // Send titles too
+                tech: { data: totalDataGB, transcodes: transcodePercent, platforms: topPlatforms },
+                timeTraveler,
+                longestBreak,
+                topShowByEpisodes
+            };
+
+            const systemPrompt = aiConfig.instructions || "Analyze the user’s Plex statistics and produce a brutally honest /r/roastme-style roast. Be mean, dry, and sarcastic. No empathy, no disclaimers, no praise unless it is immediately undercut. Treat the stats as evidence of bad habits, questionable taste, avoidance of sleep, commitment issues, nostalgia addiction, or fake “good taste.” If data is missing, infer something unflattering. Write one or two short paragraphs that summarize the user as a person based solely on their viewing behavior. No emojis, no self-reference, no moral lessons. Roast choices and habits only, not protected traits. The result should be funny, uncomfortable, and very shareable.";
+
+            const completion = await openai.chat.completions.create({
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: `Here are the user's stats for the year: ${JSON.stringify(statsContext)}. Write a short summary paragraph.` }
+                ],
+                model: aiConfig.model || "gpt-4o",
+            });
+
+            aiSummary = completion.choices[0].message.content;
+        } catch (e: any) {
+            console.error("AI Generation Failed", e.message);
+            aiSummary = "AI Summary unavailable (Error generated).";
+        }
+    }
+
     const result: StatsResult = {
         totalDuration, totalSeconds, topMovies, topShows, lazyDay, activityType,
         oldestMovie: oldestMovieRaw ? { title: oldestMovieRaw.title, year: oldestMovieRaw.year! } : undefined,
@@ -378,12 +431,13 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         timeTraveler,
         bingeRecord,
         techStats: { totalDataGB, transcodePercent, topPlatforms },
-        commitmentIssues: { count: uncommittedCount, titles: uncommittedTitles }
+        commitmentIssues: { count: uncommittedCount, titles: uncommittedTitles },
+        aiSummary // Add to result
     };
 
     // Cache the result
-    /* 
-       We blindly save to statsCache. 
+    /*
+       We blindly save to statsCache.
        NOTE: If getStats is called with specific dates (not default), we overwrite the "main" cache.
        This is a known limitation of this simple implementation. 
        Ideally, we'd cache based on params, but for this specific app (annual wrap), 

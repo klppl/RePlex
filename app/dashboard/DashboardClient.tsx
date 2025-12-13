@@ -20,6 +20,8 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
     const [progress, setProgress] = useState(0);
     const [expandedActor, setExpandedActor] = useState<string | null>(null);
     const [expandedCommitment, setExpandedCommitment] = useState(false);
+    const [loadingAi, setLoadingAi] = useState(false);
+    const [uploadDots, setUploadDots] = useState("");
 
     const logBuffer = useRef<string[]>([]);
     const isSyncActive = useRef(false);
@@ -96,6 +98,15 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
         return () => clearInterval(interval);
     }, [loading]);
 
+    // Uploading dots animation
+    useEffect(() => {
+        if (!loadingAi) return;
+        const interval = setInterval(() => {
+            setUploadDots(prev => prev.length >= 3 ? "" : prev + ".");
+        }, 500);
+        return () => clearInterval(interval);
+    }, [loadingAi]);
+
     const performSync = async (force: boolean, signal?: AbortSignal) => {
         if (loading || isSyncActive.current) return;
         setLoading(true);
@@ -167,12 +178,46 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                 await new Promise(r => setTimeout(r, 100));
             }
 
+            const AI_LOADING_MESSAGES = [
+                "Escalating to artificial intelligence.",
+                "Feeding the machine your coping mechanisms.",
+                "Asking a machine what this says about you.",
+                "Handing over the evidence.",
+                "Reducing you to watch history.",
+                "Converting time spent into truth.",
+                "Interpretation pending.",
+                "Uploading behavioral patterns.",
+                "Submitting your year for judgment."
+            ];
+
             // Allow user to read final message
             await new Promise(r => setTimeout(r, 1500));
 
-            // Refresh stats
-            const statsRes = await fetch(`/api/stats?userId=${userId}&year=${year}`);
+            const randomMsg = AI_LOADING_MESSAGES[Math.floor(Math.random() * AI_LOADING_MESSAGES.length)];
+            logBuffer.current.push(`>> ${randomMsg}`);
+
+            // Artificial delay for "uploading..." effect
+            // We can't blocking-wait here easily while updating state for animation without a separate effect or interval, 
+            // but we can just push updates to the log buffer or use a temp state.
+            // Actually, the log buffer is the typewriter. The user wants "uploading..." below it. 
+            // The log buffer *is* the screen. So let's push "Uploading" then update it?
+            // "And right below it have it say 'uploading...' where the dots are loading"
+
+            // Let's add a special log line that we can animate? 
+            // Or simpler: just push "Uploading" then "Uploading." then "Uploading.." to logBuffer? 
+            // The log buffer auto-scrolls. 
+            // A smoother way: Set a local state 'showUploading' that renders below the logs in the CRT screen.
+
+            // let's add a state for it.
+            setLoadingAi(true); // New state to trigger the uploading text in UI
+
+            await new Promise(r => setTimeout(r, 3000)); // Wait for "upload"
+
+            // Refresh stats (Force refresh to generate AI summary now that data is present)
+            const statsRes = await fetch(`/api/stats?userId=${userId}&year=${year}&refresh=true`);
             const newStats = await statsRes.json();
+
+            setLoadingAi(false);
 
             completedSuccessfully = true;
             setLoading(false); // Force loading off before state update
@@ -203,7 +248,9 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
         performSync(true);
     };
 
-    if (loading) {
+    // Show loader if explicitly loading OR if we are in the auto-sync state (empty stats, not synced yet)
+    // This prevents the "flash" of the empty dashboard before the auto-sync effect kicks in.
+    if (loading || (stats.totalSeconds === 0 && !synced)) {
         return (
             <div className="min-h-screen bg-[#111] flex flex-col items-center justify-center p-4">
                 {/* CRT Monitor Case */}
@@ -246,6 +293,12 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                                     {log}
                                 </div>
                             ))}
+                            {loadingAi && (
+                                <div className="mb-1 text-sm md:text-base break-words font-medium tracking-wide text-emerald-300 drop-shadow-[0_0_5px_rgba(34,197,94,0.6)] animate-pulse">
+                                    <span className="opacity-20 mr-4 select-none text-[10px] aligned-top">{(logs.length + 1).toString().padStart(3, '0')}</span>
+                                    &gt;&gt; Uploading Data{uploadDots}
+                                </div>
+                            )}
                             <div className="text-green-500/80 animate-pulse mt-1 ml-9">_</div>
                         </div>
 
@@ -280,12 +333,19 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                     <button onClick={handleForceRefresh} className="text-xs font-semibold uppercase tracking-wider text-orange-400 hover:text-orange-300 transition">
                         Redownload Data
                     </button>
-                    <button onClick={() => window.location.reload()} className="text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-white transition">
-                        Refresh
+                    <button
+                        onClick={async () => {
+                            try {
+                                await fetch('/api/auth/logout', { method: 'POST' });
+                                window.location.href = '/';
+                            } catch (e) {
+                                window.location.href = '/';
+                            }
+                        }}
+                        className="text-xs font-semibold uppercase tracking-wider text-red-500 hover:text-red-400 transition"
+                    >
+                        Logout
                     </button>
-                    <a href="/" className="text-xs font-semibold uppercase tracking-wider text-emerald-500 hover:text-emerald-400 transition">
-                        Change User
-                    </a>
                 </div>
             </nav>
 
@@ -299,6 +359,29 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                         </h1>
                         <p className="text-xl text-slate-400">You spent a lot of time watching screens.</p>
                     </div>
+
+                    {/* AI SUMMARY */}
+                    {stats.aiSummary && (
+                        <div className="max-w-2xl mx-auto bg-gradient-to-br from-purple-900/20 to-indigo-900/20 border border-purple-500/30 p-8 rounded-3xl shadow-2xl relative overflow-hidden group">
+                            {/* Decorative quotes */}
+                            <div className="absolute top-4 left-4 text-6xl text-purple-500/20 font-serif leading-none">“</div>
+                            <div className="absolute bottom-4 right-4 text-6xl text-purple-500/20 font-serif leading-none rotate-180">“</div>
+
+                            <div className="relative z-10">
+                                <div className="flex items-center justify-center gap-2 mb-4">
+                                    <span className="bg-purple-500/10 text-purple-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest border border-purple-500/20">
+                                        AI Analysis
+                                    </span>
+                                </div>
+                                <p className="text-lg md:text-xl text-purple-100 font-medium leading-relaxed italic">
+                                    {stats.aiSummary}
+                                </p>
+                            </div>
+
+                            {/* Background glow */}
+                            <div className="absolute inset-0 bg-purple-500/5 blur-3xl rounded-full group-hover:bg-purple-500/10 transition duration-1000"></div>
+                        </div>
+                    )}
 
                     <div className="py-12 relative group cursor-default">
                         <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 rounded-3xl blur-3xl group-hover:bg-emerald-500/20 transition duration-500"></div>
