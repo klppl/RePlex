@@ -33,3 +33,8 @@ RePlex generates a "Spotify Wrapped" style year-in-review for Plex users by aggr
 2. `npx prisma db push`
 3. `npm run dev`
 4. Visit `/admin` to configure your Tautulli connection and generate admin credentials.
+
+## Preview
+<a href="screenshot.png">
+  <img src="screenshot.png" style="width: 100%; max-width: 800px; border-radius: 10px; border: 1px solid #333;" alt="RePlex Dashboard Preview">
+</a>
