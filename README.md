@@ -1,64 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RePlex
 
-## 🚀 Getting Started
+> [!CAUTION]
+> **VIBE CODED PROJECT — HOST AT YOUR OWN RISK**  
+> This project is 100% "vibe coded" (rapidly experimented/generated). It has **NOT** been audited for security.  
+> **DO NOT HOST THIS ON THE PUBLIC INTERNET.**  
+> It is intended strictly for internal/private network use. If you expose this to the web, you are effectively letting strangers into your house. You have been warned.
 
-### Prerequisites
+## Broken? Fix it.
+If something is broken, **fix it and create a Pull Request.**  
+If you can't fix it, at least post an Issue with details. We appreciate contributions that keep the vibes going.
 
--   Node.js 18+
--   A Tautulli instance running and accessible.
--   A Plex account.
+---
 
-### First Run & Setup
+## Technical Overview
+RePlex generates a "Spotify Wrapped" style year-in-review for Plex users by aggregating playback data from Tautulli.
 
-1.  **Install Dependencies**:
-    ```bash
-    npm install
-    ```
+### Stack
+- **Framework**: [Next.js](https://nextjs.org/) (App Router, Server Actions)
+- **Database**: SQLite (managed via [Prisma](https://www.prisma.io/))
+- **Integration**: Tautulli API (User playback history)
+- **AI**: OpenAI API (GPT-4o) for generating "roast" personality summaries.
+- **Styling**: Tailwind CSS & Framer Motion.
 
-2.  **Initialize Database**:
-    ```bash
-    npx prisma db push
-    ```
+### Core Features
+- **Admin Dashboard**: (`/admin`) manage users, sync Tautulli history, and trigger report generation.
+- **User Dashboard**: (`/dashboard?userId=X`) public-facing (internal) view for users to explore their stats.
+- **AI Summaries**:  Generates a "brutally honest" personality roast based on watch history.
+- **Caching**: Heavy Tautulli queries are cached in SQLite for instant dashboard loading.
 
-3.  **Run Development Server**:
-    ```bash
-    npm run dev
-    ```
-
-4.  **Configuration**:
-    -   Open [http://localhost:3000](http://localhost:3000).
-    -   Click **"Admin Setup"** (since it's a fresh install, logic is empty).
-    -   Enter your **Tautulli Connection Details** (IP, Port, API Key).
-    -   The system will connect and sync the user list from Tautulli.
-
-5.  **Login**:
-    -   Return to the home page.
-    -   Click **"Sign in with Plex"**.
-    -   Once authenticated, your history will sync!
-
-## 🛠️ Development
-
-To modify the database schema:
-```bash
-npx prisma db push
-```
-
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Setup
+1. Clone repo & `npm install`
+2. `npx prisma db push`
+3. `npm run dev`
+4. Visit `/admin` to configure your Tautulli connection and generate admin credentials.
