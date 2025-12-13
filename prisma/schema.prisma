@@ -1,0 +1,82 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model TautulliConfig {
+  id       Int     @id @default(1)
+  ip       String
+  port     Int
+  apiKey   String
+  useSsl   Boolean @default(false)
+  rootPath String?
+}
+
+model AdminUser {
+  id           Int    @id @default(autoincrement())
+  username     String @unique
+  passwordHash String
+}
+
+model User {
+  id       Int     @id // Tautulli User ID
+  username String?
+  email    String?
+  thumb    String?
+  isActive Boolean @default(true)
+  
+  statsCache       String?  // JSON string of StatsResult
+  statsGeneratedAt DateTime?
+  
+  history  WatchHistory[]
+  syncLogs SyncLog[]
+}
+
+model WatchHistory {
+  id                  Int      @id @default(autoincrement())
+  tautulliId          Int?     // row_id from Tautulli (optional as it might not be unique across servers if multiple)
+  userId              Int
+  user                User     @relation(fields: [userId], references: [id])
+  date                DateTime // UNIX timestamp converted
+  
+  duration            Int      // Seconds
+  percentComplete     Int?     // 0-100 (changed to nullable as per instruction)
+  mediaType           String   // movie, episode, track
+  year                Int?     // Release year
+  actors              String?  // Comma separated
+  genres              String?  // Comma separated
+  rating              Float?
+  transcodeDecision   String?
+  player              String?
+  fileSize            BigInt?
+  
+  title               String
+  parentTitle         String?
+  grandparentTitle    String?
+  
+  ratingKey           String?  // Plex Rating Key
+  parentRatingKey     String?
+  grandparentRatingKey String?
+  
+  fullTitle           String?  // Constructed title for display
+
+  @@index([userId])
+  @@index([date])
+}
+
+model SyncLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  date      DateTime // Represents the DAY (YYYY-MM-DD 00:00:00)
+  completed Boolean  @default(false)
+
+  @@unique([userId, date])
+}

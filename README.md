@@ -1,20 +1,48 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
+## 🚀 Getting Started
 
-First, run the development server:
+### Prerequisites
 
+-   Node.js 18+
+-   A Tautulli instance running and accessible.
+-   A Plex account.
+
+### First Run & Setup
+
+1.  **Install Dependencies**:
+    ```bash
+    npm install
+    ```
+
+2.  **Initialize Database**:
+    ```bash
+    npx prisma db push
+    ```
+
+3.  **Run Development Server**:
+    ```bash
+    npm run dev
+    ```
+
+4.  **Configuration**:
+    -   Open [http://localhost:3000](http://localhost:3000).
+    -   Click **"Admin Setup"** (since it's a fresh install, logic is empty).
+    -   Enter your **Tautulli Connection Details** (IP, Port, API Key).
+    -   The system will connect and sync the user list from Tautulli.
+
+5.  **Login**:
+    -   Return to the home page.
+    -   Click **"Sign in with Plex"**.
+    -   Once authenticated, your history will sync!
+
+## 🛠️ Development
+
+To modify the database schema:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npx prisma db push
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

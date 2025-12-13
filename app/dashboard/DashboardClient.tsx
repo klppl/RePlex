@@ -1,0 +1,711 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { StatCard } from '../components/StatCard';
+import { StatsResult } from '@/lib/services/stats';
+
+interface DashboardClientProps {
+    initialStats: StatsResult;
+    userId: number;
+    year: number;
+}
+
+export default function DashboardClient({ initialStats, userId, year }: DashboardClientProps) {
+    const router = useRouter();
+    const [stats, setStats] = useState(initialStats);
+    const [synced, setSynced] = useState(false);
+    const [logs, setLogs] = useState<string[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [expandedActor, setExpandedActor] = useState<string | null>(null);
+    const [expandedCommitment, setExpandedCommitment] = useState(false);
+
+    const logBuffer = useRef<string[]>([]);
+    const isSyncActive = useRef(false);
+    const quotesShown = useRef(0);
+
+    const FUNNY_QUOTES = [
+        "Dont Netflix and Chill. Plex and sex.",
+        "Stream and sleep",
+        "Buffering and Suffering",
+        "Binge and Cringe",
+        "My server stays up longer than you do.",
+        "Friends don't let friends transcode.",
+        "Calculating total hours of regret...",
+        "Judging your movie taste...",
+        "Analyzing your bandwidth abuse.",
+        "Tallying up your sleepless nights.",
+        "Checking if you actually watched it, or just fell asleep.",
+        "Transcoding your life choices...",
+        "Skipping intros...",
+        "Finding subtitles for your existence...",
+        "My load balance is heavy.",
+        "One more episode. Again.",
+        "Content hoarded successfully.",
+        "This seemed like a good idea at 02:13.",
+        "You paid for this bandwidth.",
+        "Your ISP is watching.",
+        "Detecting unnecessary 4K streams.",
+        "Calculating your most ignored genre...",
+        "Ranking shows you never finished.",
+        "Measuring commitment issues per season.",
+        "Determining your comfort-show dependency.",
+        "Finding the episode you rewatched 'by accident'.",
+        "This says more about you than you think.",
+        "This playlist is a cry for help.",
+        "Watching anything to feel something.",
+        "Yes, you watched the same actor again."
+    ];
+
+    // Auto-sync effect
+    useEffect(() => {
+        const controller = new AbortController();
+        let timeoutId: NodeJS.Timeout;
+
+        if (stats.totalSeconds === 0 && !synced && !loading) {
+            // Debounce sync to prevent React Strict Mode double-invocation cancellation crashes
+            timeoutId = setTimeout(() => {
+                console.log("Auto-sync triggering...");
+                performSync(false, controller.signal);
+            }, 500);
+        }
+
+        return () => {
+            clearTimeout(timeoutId);
+            controller.abort();
+        };
+    }, [stats.totalSeconds, synced]); // Removed loading from dep array as performSync handles it
+
+    // Log draining effect (The "Typewriter" effect)
+    useEffect(() => {
+        if (!loading) return;
+        const interval = setInterval(() => {
+            if (logBuffer.current.length > 0) {
+                const nextLog = logBuffer.current.shift();
+                if (nextLog) {
+                    setLogs(prev => {
+                        const newLogs = [...prev, nextLog];
+                        if (newLogs.length > 100) return newLogs.slice(-100);
+                        return newLogs;
+                    });
+                }
+            }
+        }, 60);
+
+        return () => clearInterval(interval);
+    }, [loading]);
+
+    const performSync = async (force: boolean, signal?: AbortSignal) => {
+        if (loading || isSyncActive.current) return;
+        setLoading(true);
+        setLogs([]);
+        setProgress(0);
+        logBuffer.current = ["Initiating Sync Protocol..."];
+        isSyncActive.current = true;
+        quotesShown.current = 0;
+        let completedSuccessfully = false;
+
+        const fromDate = `${year}-01-01`;
+        const now = new Date();
+        const isCurrentYear = now.getFullYear() === year;
+        const toDate = isCurrentYear ? now.toISOString().split('T')[0] : `${year}-12-31`;
+
+        try {
+            const response = await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, from: fromDate, to: toDate, force }),
+                signal // Use abort signal
+            });
+
+
+            if (!response.body) throw new Error("No response body");
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            let done = false;
+            while (!done) {
+                const { value, done: doneReading } = await reader.read();
+                done = doneReading;
+                if (value) {
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n').filter(l => l.trim());
+                    for (const line of lines) {
+                        if (line.startsWith('PROGRESS:')) {
+                            // Parse progress
+                            const pct = parseInt(line.split(':')[1], 10);
+                            if (!isNaN(pct)) setProgress(pct);
+                        } else if (line.startsWith('MONTH_START:')) {
+                            const month = line.substring(12);
+                            logBuffer.current.push(`> Analyzing ${month}...`);
+
+                            // One-liner per month
+                            const randomQuote = FUNNY_QUOTES[Math.floor(Math.random() * FUNNY_QUOTES.length)];
+                            logBuffer.current.push(`> ${randomQuote}`);
+
+                        } else if (line.startsWith('SYNC_COMPLETE:')) {
+                            logBuffer.current.push(">> Sync Sequence Complete.");
+                            setProgress(100);
+                        } else if (line.startsWith('ERROR:')) {
+                            console.error("Sync Error", line);
+                            logBuffer.current.push("!! ERROR !! " + line.substring(6));
+                        } else {
+                            logBuffer.current.push("> " + line);
+                        }
+                    }
+                }
+            }
+
+            console.log("Sync finished reading stream.");
+            setSynced(true);
+            isSyncActive.current = false;
+            setProgress(100);
+
+            // Allow the buffer to drain
+            while (logBuffer.current.length > 0) {
+                await new Promise(r => setTimeout(r, 100));
+            }
+
+            // Allow user to read final message
+            await new Promise(r => setTimeout(r, 1500));
+
+            // Refresh stats
+            const statsRes = await fetch(`/api/stats?userId=${userId}&year=${year}`);
+            const newStats = await statsRes.json();
+
+            completedSuccessfully = true;
+            setLoading(false); // Force loading off before state update
+
+            // Short delay to allow react to flush
+            await new Promise(r => setTimeout(r, 0));
+            setStats(newStats);
+
+        } catch (err: any) {
+            if (err.name === 'AbortError') {
+                console.log("Sync aborted.");
+                return;
+            }
+            console.error("Sync failed:", err);
+            logBuffer.current.push("!! CRITICAL FAILURE !! " + err.message);
+            isSyncActive.current = false;
+            await new Promise(r => setTimeout(r, 3000));
+        } finally {
+            if (!signal?.aborted || completedSuccessfully) {
+                setLoading(false);
+            }
+        }
+    };
+
+    const handleForceRefresh = () => {
+        if (!confirm("Force refresh? This re-downloads all data.")) return;
+        setSynced(false);
+        performSync(true);
+    };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-[#111] flex flex-col items-center justify-center p-4">
+                {/* CRT Monitor Case */}
+                <div className="relative w-full max-w-4xl aspect-video bg-[#222] rounded-3xl shadow-2xl flex flex-col overflow-hidden p-4 pb-10 border-t-2 border-white/5">
+
+                    {/* Screen Glass/Container */}
+                    <div className="relative flex-1 bg-[#051005] overflow-hidden shadow-[inset_0_0_80px_rgba(0,0,0,1)] rounded-xl border border-black/50 ring-1 ring-white/10 flex flex-col">
+
+                        {/* Scanlines & RGB Split Overlay */}
+                        <div className="absolute inset-0 pointer-events-none z-20 opacity-20"
+                            style={{
+                                backgroundImage: `linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06))`,
+                                backgroundSize: '100% 4px, 6px 100%'
+                            }}>
+                        </div>
+
+                        {/* Screen Reflection/Gloss */}
+                        <div className="absolute inset-0 pointer-events-none z-30 bg-gradient-to-br from-white/5 to-transparent rounded-xl"></div>
+
+                        {/* Flicker Animation */}
+                        <div className="absolute inset-0 pointer-events-none z-10 bg-green-500/5 animate-pulse mix-blend-overlay"></div>
+
+                        {/* Content Area */}
+                        <div className="relative z-0 flex-1 p-8 font-mono text-green-500 overflow-y-auto flex flex-col"
+                            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                            ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}>
+                            <style jsx>{`
+                                ::-webkit-scrollbar {
+                                    display: none;
+                                }
+                             `}</style>
+                            <div className="mb-6 text-center opacity-70 uppercase tracking-[0.2em] text-[10px] pb-4 border-b border-green-900/30 flex justify-center items-center gap-2">
+                                <div className="w-2 h-2 bg-green-500 rounded-full animate-ping"></div>
+                                RePlex OS v1.0 // Sync Protocol
+                            </div>
+
+                            {logs.map((log, i) => (
+                                <div key={i} className={`mb-1 text-sm md:text-base break-words font-medium tracking-wide drop-shadow-[0_0_5px_rgba(34,197,94,0.6)] ${log.startsWith("!!") ? "text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.8)]" : log.startsWith(">>") ? "text-emerald-300 font-bold" : "text-green-500/90"}`}>
+                                    <span className="opacity-20 mr-4 select-none text-[10px] aligned-top">{(i + 1).toString().padStart(3, '0')}</span>
+                                    {log}
+                                </div>
+                            ))}
+                            <div className="text-green-500/80 animate-pulse mt-1 ml-9">_</div>
+                        </div>
+
+                        {/* Progress Bar Area (Fixed at bottom of screen) */}
+                        <div className="relative z-20 p-6 pt-0">
+                            <div className="w-full h-4 border border-green-800/50 bg-black/40 rounded-sm relative overflow-hidden">
+                                <div className="h-full bg-green-500/50 transition-all duration-300 ease-out" style={{ width: `${progress}%` }}></div>
+                                {/* Striped pattern overlay for retro look */}
+                                <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, #000 5px, #000 10px)' }}></div>
+                                <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-green-400 tracking-widest drop-shadow-[0_0_2px_black]">
+                                    SYNCING DATA... {progress}%
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-emerald-500/30">
+
+            {/* Navigation / Header */}
+            <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-white/5 px-6 py-4 flex justify-between items-center">
+                <div>
+                    <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400">RePlex</span>
+                    <span className="ml-2 text-xs text-slate-500 hidden sm:inline">User #{userId}</span>
+                </div>
+                <div className="flex gap-4">
+                    <button onClick={handleForceRefresh} className="text-xs font-semibold uppercase tracking-wider text-orange-400 hover:text-orange-300 transition">
+                        Redownload Data
+                    </button>
+                    <button onClick={() => window.location.reload()} className="text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-white transition">
+                        Refresh
+                    </button>
+                    <a href="/" className="text-xs font-semibold uppercase tracking-wider text-emerald-500 hover:text-emerald-400 transition">
+                        Change User
+                    </a>
+                </div>
+            </nav>
+
+            <main className="max-w-4xl mx-auto px-6 pt-32 pb-32 space-y-32">
+
+                {/* HERO SECTION: INTRO & TOTAL TIME */}
+                <section className="text-center space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+                    <div>
+                        <h1 className="text-5xl md:text-7xl font-black mb-2 tracking-tight">
+                            Your {year} <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Wrapped</span>
+                        </h1>
+                        <p className="text-xl text-slate-400">You spent a lot of time watching screens.</p>
+                    </div>
+
+                    <div className="py-12 relative group cursor-default">
+                        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 rounded-3xl blur-3xl group-hover:bg-emerald-500/20 transition duration-500"></div>
+                        <div className="relative bg-slate-900/50 border border-white/10 p-12 rounded-3xl backdrop-blur-sm">
+                            <p className="text-emerald-400 font-medium uppercase tracking-widest mb-4">Total Watch Time</p>
+                            <div className="text-6xl md:text-8xl font-black text-white mb-4 tracking-tighter">
+                                {stats.totalDuration}
+                            </div>
+                            <div className="flex justify-center gap-8 mt-8 text-sm text-slate-400">
+                                <div>
+                                    <span className="block text-emerald-400 font-bold text-xl">{Math.round(stats.mediaTypeSplit.movies / 3600)}h</span>
+                                    <span>Movies</span>
+                                </div>
+                                <div className="h-10 w-px bg-slate-800"></div>
+                                <div>
+                                    <span className="block text-blue-400 font-bold text-xl">{Math.round(stats.mediaTypeSplit.shows / 3600)}h</span>
+                                    <span>TV Shows</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                {/* PERSONALITY & DEEP DIVE (Consolidated DNA) */}
+                <section className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-150">
+                    <div className="flex items-center gap-4 mb-8">
+                        <span className="text-4xl">🧬</span>
+                        <h2 className="text-3xl font-bold">Your DNA</h2>
+                    </div>
+
+                    <div className="flex flex-col gap-8">
+                        {/* 1. YOU STAN (Top 3 Bar Chart) */}
+                        <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex flex-col hover:border-pink-500/50 transition duration-300">
+                            <div className="flex justify-between items-start mb-6">
+                                <h3 className="text-pink-400 uppercase tracking-widest text-sm font-bold">You Stan</h3>
+                                <div className="text-3xl opacity-50">🤩</div>
+                            </div>
+
+                            <div className="space-y-6 flex-1">
+                                {stats.yourStan && stats.yourStan.length > 0 ? (
+                                    stats.yourStan.map((s, i) => (
+                                        <div key={i} className="space-y-2 group">
+                                            <div
+                                                className="flex justify-between text-sm font-semibold cursor-pointer hover:text-pink-300 transition"
+                                                onClick={() => setExpandedActor(expandedActor === s.actor ? null : s.actor)}
+                                                title="Click to see titles"
+                                            >
+                                                <span className="text-white group-hover:underline decoration-pink-500/50 underline-offset-4">{s.actor}</span>
+                                                <span className="text-slate-400 group-hover:text-white transition">{s.count} titles <span className="text-[10px] ml-1 opacity-50">▼</span></span>
+                                            </div>
+                                            <div className="h-4 bg-slate-800 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-gradient-to-r from-pink-500 to-rose-400 rounded-full"
+                                                    style={{ width: `${stats.yourStan ? (s.count / stats.yourStan[0].count) * 100 : 0}%` }}
+                                                ></div>
+                                            </div>
+                                            {expandedActor === s.actor && (
+                                                <div className="mt-3 pl-4 border-l-2 border-slate-700 space-y-1 animate-in slide-in-from-top-2 fade-in duration-200">
+                                                    {s.titles.map((t, idx) => (
+                                                        <div key={idx} className="text-xs text-slate-400">{t}</div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))
+                                ) : (
+                                    <p className="text-slate-500 text-center my-auto">No actor data.</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* 2. GENRE WHEEL */}
+                        <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex flex-col hover:border-emerald-500/50 transition">
+                            <div className="flex justify-between items-start mb-6">
+                                <h3 className="text-emerald-400 uppercase tracking-widest text-sm font-bold">Genre Breakdown</h3>
+                                <div className="text-3xl opacity-50">🎨</div>
+                            </div>
+                            <div className="space-y-6 flex-1">
+                                {stats.genreWheel.map((g, i) => (
+                                    <div key={i} className="space-y-2">
+                                        <div className="flex justify-between text-sm font-semibold">
+                                            <span className="text-white">{g.genre}</span>
+                                            <span className="text-slate-400">{g.percentage}%</span>
+                                        </div>
+                                        <div className="h-4 bg-slate-800 rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full"
+                                                style={{ width: `${g.percentage}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {stats.genreWheel.length === 0 && <p className="text-slate-500 text-center my-auto">No genre data available.</p>}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 3. BLAST FROM THE PAST */}
+                    {(stats.oldestMovie || stats.oldestShow) && (
+                        <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 hover:border-cyan-500/50 transition">
+                            <h3 className="text-cyan-400 uppercase tracking-widest text-sm font-bold mb-8">Blast from the Past</h3>
+                            <div className="flex flex-col gap-8">
+                                {stats.oldestMovie && (
+                                    <div className="flex items-center gap-4 bg-slate-950/50 p-4 rounded-2xl border border-white/5">
+                                        <div className="text-4xl">🦕</div>
+                                        <div>
+                                            <div className="text-xs text-slate-500 uppercase font-bold mb-1">Oldest Movie</div>
+                                            <div className="font-bold text-white text-lg">{stats.oldestMovie.title}</div>
+                                            <div className="text-slate-400 text-sm">Released in {stats.oldestMovie.year}</div>
+                                        </div>
+                                    </div>
+                                )}
+                                {stats.oldestShow && (
+                                    <div className="flex items-center gap-4 bg-slate-950/50 p-4 rounded-2xl border border-white/5">
+                                        <div className="text-4xl">📺</div>
+                                        <div>
+                                            <div className="text-xs text-slate-500 uppercase font-bold mb-1">Oldest TV Show</div>
+                                            <div className="font-bold text-white text-lg">{stats.oldestShow.title}</div>
+                                            <div className="text-slate-400 text-sm">Released in {stats.oldestShow.year}</div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 7. INSIGHTS (Commitment & Binge - Moved Up) */}
+                    <div className="flex flex-col gap-8">
+                        {stats.commitmentIssues.count > 0 && (
+                            <div
+                                className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex flex-col gap-6 hover:border-red-500/50 transition cursor-pointer group"
+                                onClick={() => setExpandedCommitment(!expandedCommitment)}
+                            >
+                                <div className="flex items-center gap-6">
+                                    <div className="text-4xl text-red-400 bg-red-900/10 p-4 rounded-full">💔</div>
+                                    <div>
+                                        <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-1">Commitment Issues</h3>
+                                        <p className="text-lg font-bold text-white leading-tight">
+                                            You abandoned <span className="text-red-400 group-hover:underline underline-offset-4 decoration-red-500/50 transition">{stats.commitmentIssues.count} movies</span> before the 20% mark.
+                                        </p>
+                                    </div>
+                                    <div className="ml-auto text-slate-500 text-sm opacity-50 group-hover:opacity-100 transition">
+                                        {expandedCommitment ? '▲' : '▼'}
+                                    </div>
+                                </div>
+
+                                {expandedCommitment && (
+                                    <div className="mt-2 pt-6 border-t border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-4 animate-in slide-in-from-top-2 fade-in duration-300">
+                                        {stats.commitmentIssues.titles.map((title, i) => (
+                                            <div key={i} className="flex items-start gap-2 text-sm text-slate-400">
+                                                <span className="text-red-500/50 mt-1">•</span>
+                                                <span className="group-hover:text-slate-300 transition">{title}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {stats.bingeRecord && (
+                            <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex items-center gap-6 hover:border-blue-500/50 transition">
+                                <div className="text-4xl text-blue-400 bg-blue-900/10 p-4 rounded-full">🥤</div>
+                                <div>
+                                    <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-1">Binge Record</h3>
+                                    <p className="text-lg font-bold text-white leading-tight">
+                                        On {stats.bingeRecord.date}, you watched <span className="text-blue-400">{stats.bingeRecord.count} episodes</span> of {stats.bingeRecord.show} in a row.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 4. HABITS & TIME (Stacked) */}
+                    <div className="flex flex-col gap-8">
+
+                        {/* LAZIEST DAY (Bar Chart) */}
+                        <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex flex-col hover:border-purple-500/50 transition group">
+                            <div className="flex justify-between items-start mb-6">
+                                <div>
+                                    <h3 className="text-purple-400 uppercase tracking-widest text-sm font-bold mb-1">Laziest Day</h3>
+                                    <div className="text-2xl font-black text-white">{stats.lazyDay.winner.day}</div>
+                                    <p className="text-slate-400 text-xs">{stats.lazyDay.winner.hours} hours total.</p>
+                                </div>
+                                <div className="text-2xl opacity-20 group-hover:opacity-100 transition">📅</div>
+                            </div>
+
+                            {/* Bar Chart Container */}
+                            <div className="flex items-end justify-between h-48 gap-3 mt-4 px-2">
+                                {stats.lazyDay.chartData.map((d, i) => {
+                                    const max = Math.max(...stats.lazyDay.chartData.map(x => x.hours));
+                                    const h = max > 0 ? (d.hours / max) * 100 : 0;
+                                    const isWinner = d.day === stats.lazyDay.winner.day;
+                                    return (
+                                        <div key={i} className="flex flex-col items-center gap-2 flex-1 group/bar h-full justify-end">
+                                            <div className="w-full relative flex items-end justify-center h-full max-h-full rounded-t-sm overflow-visible bg-slate-800/30 rounded-lg pb-0">
+                                                <div
+                                                    className={`w-full mx-0.5 md:mx-1 rounded-t-lg transition-all duration-1000 ease-out ${isWinner ? 'bg-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'bg-slate-700 group-hover/bar:bg-slate-600'}`}
+                                                    style={{ height: `${h}%` }}
+                                                ></div>
+                                                {/* Tooltip */}
+                                                <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover/bar:opacity-100 transition whitespace-nowrap pointer-events-none z-10 border border-white/10 shadow-xl">
+                                                    {d.hours}h
+                                                </div>
+                                            </div>
+                                            <div className={`text-[10px] md:text-xs uppercase font-bold ${isWinner ? 'text-purple-400' : 'text-slate-600'}`}>{d.short}</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* VIBE CHECK (Donut Chart) */}
+                        <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-8 hover:border-yellow-500/50 transition group overflow-visible">
+                            <div className="flex-1 w-full text-center md:text-left">
+                                <div className="flex justify-between items-start mb-2 relative">
+                                    <div className="w-full">
+                                        <h3 className="text-yellow-400 uppercase tracking-widest text-sm font-bold mb-1">Vibe Check</h3>
+                                        <div className="text-4xl font-black text-white">{stats.activityType.winner}</div>
+                                        <p className="text-slate-400 text-sm mt-3 leading-relaxed max-w-md mx-auto md:mx-0">
+                                            {stats.activityType.winner === 'Night Owl' && "You watch the most between 22:00 and 05:00."}
+                                            {stats.activityType.winner === 'Early Bird' && "You watch the most between 05:00 and 11:00."}
+                                            {stats.activityType.winner === 'Balanced' && "You watch the most during the day (11:00 to 22:00)."}
+                                        </p>
+                                    </div>
+                                    <div className="text-4xl opacity-20 group-hover:opacity-100 transition absolute right-0 top-0">🌙</div>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-6 flex-shrink-0">
+                                {/* Simple CSS Conic Gradient Donut */}
+                                {(() => {
+                                    const { night, morning, day } = stats.activityType.chartData;
+                                    const total = night + morning + day || 1;
+                                    const pNight = (night / total) * 100;
+                                    const pMorning = (morning / total) * 100;
+                                    const pDay = (day / total) * 100;
+
+                                    return (
+                                        <>
+                                            <div className="relative w-40 h-40 rounded-full flex items-center justify-center shadow-2xl flex-shrink-0"
+                                                style={{
+                                                    background: `conic-gradient(
+                                                        #3b82f6 0% ${pDay}%, 
+                                                        #fbbf24 ${pDay}% ${pDay + pMorning}%, 
+                                                        #6366f1 ${pDay + pMorning}% 100%
+                                                    )`
+                                                }}
+                                            >
+                                                {/* Inner cutout */}
+                                                <div className="w-28 h-28 bg-slate-900 rounded-full flex flex-col items-center justify-center z-10 shadow-inner">
+                                                    <div className="text-xs text-slate-500 font-bold uppercase tracking-widest">Total</div>
+                                                    <div className="text-white font-bold text-xl">{Math.round(total)}h</div>
+                                                </div>
+                                            </div>
+
+                                            {/* Static Legend (No longer absolute) */}
+                                            <div className="flex flex-col gap-3 text-sm font-medium min-w-[80px]">
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-2 text-indigo-400 font-bold">
+                                                        <div className="w-3 h-3 rounded-full bg-indigo-500"></div> Night 🌙
+                                                    </div>
+                                                    <div className="text-xs text-slate-500 ml-5">{Math.round(night)}h ({Math.round(pNight)}%)</div>
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-2 text-amber-400 font-bold">
+                                                        <div className="w-3 h-3 rounded-full bg-amber-400"></div> Morn 🌅
+                                                    </div>
+                                                    <div className="text-xs text-slate-500 ml-5">{Math.round(morning)}h ({Math.round(pMorning)}%)</div>
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-2 text-blue-400 font-bold">
+                                                        <div className="w-3 h-3 rounded-full bg-blue-500"></div> Day ☀️
+                                                    </div>
+                                                    <div className="text-xs text-slate-500 ml-5">{Math.round(day)}h ({Math.round(pDay)}%)</div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                            <div className="hidden md:block w-4"></div>
+                        </div>
+
+                        {/* TIME TRAVELER */}
+                        {stats.timeTraveler && (
+                            <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-8 hover:border-purple-500/50 transition group">
+                                <div className="flex-1 w-full text-center md:text-left">
+                                    <h3 className="text-purple-400 uppercase tracking-widest text-sm font-bold mb-1">Time Traveler</h3>
+                                    <div className="text-5xl font-black text-white mb-2">{stats.timeTraveler.decade}</div>
+                                    <p className="text-slate-400 text-sm">
+                                        {stats.timeTraveler.decade === '2020s' ? "You're stuck in this decade." : `You belong in the ${stats.timeTraveler.decade}.`}
+                                    </p>
+                                </div>
+                                <div className="text-6xl opacity-20 group-hover:opacity-100 transition animate-pulse">
+                                    ⏳
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 5. BIG STATS (Longest Break, Most Episodes) */}
+                    <div className="flex flex-col gap-8">
+                        {stats.longestBreak && (
+                            <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex items-center gap-6 hover:border-red-500/50 transition">
+                                <div className="text-4xl text-red-400 bg-red-900/10 p-4 rounded-full">⏸️</div>
+                                <div>
+                                    <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-1">Longest Break</h3>
+                                    <p className="text-lg font-bold text-white leading-tight">
+                                        Paused <span className="text-red-400">{stats.longestBreak.title}</span> for {stats.longestBreak.days} days
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {stats.topShowByEpisodes && (
+                            <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex items-center gap-6 hover:border-blue-500/50 transition">
+                                <div className="text-4xl text-blue-400 bg-blue-900/10 p-4 rounded-full">🔁</div>
+                                <div>
+                                    <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-1">Most episodes watched</h3>
+                                    <p className="text-lg font-bold text-white leading-tight">
+                                        <span className="text-blue-400">{stats.topShowByEpisodes.count} episodes</span> of {stats.topShowByEpisodes.title}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 6. TECH STATS (Redesigned) */}
+                    <div className="flex flex-col gap-8">
+                        {/* Streamed */}
+                        <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex items-center gap-6 hover:border-emerald-500/50 transition">
+                            <div className="text-4xl text-emerald-400 bg-emerald-900/10 p-4 rounded-full flex-shrink-0">📡</div>
+                            <div>
+                                <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-1">Streamed</h3>
+                                <div className="text-2xl font-bold text-white leading-tight mb-1">{stats.techStats.totalDataGB} GB</div>
+                                <p className="text-xs text-slate-600 italic">"Sorry, ISP limits"</p>
+                            </div>
+                        </div>
+
+                        {/* Transcoded */}
+                        <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex items-center gap-6 hover:border-orange-500/50 transition">
+                            <div className="text-4xl text-orange-400 bg-orange-900/10 p-4 rounded-full flex-shrink-0">💾</div>
+                            <div>
+                                <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-1">Transcoded</h3>
+                                <div className="text-2xl font-bold text-white leading-tight mb-1">{stats.techStats.transcodePercent}%</div>
+                                <p className="text-xs text-slate-600 italic">"My CPU is burning"</p>
+                            </div>
+                        </div>
+
+                        {/* Top Devices */}
+                        <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center gap-6 hover:border-indigo-500/50 transition">
+                            <div className="flex items-center gap-6 mb-4 md:mb-0">
+                                <div className="text-4xl text-indigo-400 bg-indigo-900/10 p-4 rounded-full flex-shrink-0">🖥️</div>
+                                <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold md:hidden">Top Devices</h3>
+                            </div>
+
+                            <div className="flex-1 w-full">
+                                <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-3 hidden md:block">Top Devices</h3>
+                                <div className="space-y-3 w-full">
+                                    {stats.techStats.topPlatforms.map((p, i) => (
+                                        <div key={i} className="flex justify-between items-center text-sm border-b border-slate-800/50 pb-2 last:border-0 last:pb-0">
+                                            <span className="text-slate-300 font-medium truncate">{p.platform}</span>
+                                            <span className="text-indigo-400 font-bold bg-indigo-900/20 px-2 py-0.5 rounded text-xs">{p.count} plays</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+
+                </section>
+
+                {/* TOP REPLAYED MOVIES (List) */}
+                <section className="space-y-8">
+                    <div className="flex items-center gap-4 mb-4">
+                        <span className="text-4xl">🎬</span>
+                        <h2 className="text-3xl font-bold">Most Replayed Movies <span className="text-sm font-normal text-slate-500 ml-2">(Watched more than once)</span></h2>
+                    </div>
+
+                    <div className="grid gap-4">
+                        {stats.topMovies.length > 0 ? stats.topMovies.map((m, i) => (
+                            <div key={i} className="flex items-center p-6 bg-slate-900 border border-slate-800 rounded-2xl hover:border-emerald-500/50 hover:bg-slate-800 transition duration-300 group">
+                                <div className="w-12 h-12 flex items-center justify-center bg-slate-800 rounded-full text-xl font-bold text-slate-500 group-hover:text-emerald-400 group-hover:bg-slate-950 transition">
+                                    #{i + 1}
+                                </div>
+                                <div className="ml-6 flex-1">
+                                    <h3 className="text-xl font-semibold text-white group-hover:text-emerald-300 transition">{m.title}</h3>
+                                    <p className="text-slate-500 text-sm">
+                                        {m.year > 0 && <span className="mr-3">{m.year}</span>}
+                                        <span className="text-emerald-500 font-bold">{m.count} plays</span>
+                                    </p>
+                                </div>
+                                <div className="text-slate-400 font-mono text-sm text-right">
+                                    <div>{Math.round(m.duration / 60)} mins</div>
+                                    <div className="text-xs text-slate-600 uppercase tracking-wider">Total Time</div>
+                                </div>
+                            </div>
+                        )) : (
+                            <div className="p-8 text-center text-slate-500 bg-slate-900 rounded-2xl border border-slate-800 border-dashed">
+                                You haven't rewatched any movies yet.
+                            </div>
+                        )}
+                    </div>
+                </section>
+
+            </main>
+        </div >
+    );
+}
