@@ -6,11 +6,12 @@
 > **DO NOT HOST THIS ON THE PUBLIC INTERNET.**  
 > It is intended strictly for internal/private network use. If you expose this to the web, you are effectively letting strangers into your house. You have been warned.
 
-## Broken? Fix it.
-If something is broken, **fix it and create a Pull Request.**  
-If you can't fix it, at least post an Issue with details. We appreciate contributions that keep the vibes going.
+## Running with Docker
 
----
+1. Ensure you have Docker and Docker Compose installed.
+2. Run `docker compose up --build`.
+3. The application will be available at `http://localhost:3000`.
+4. The database is persisted in the `./prisma` directory.
 
 ## Technical Overview
 RePlex generates a "Spotify Wrapped" style year-in-review for Plex users by aggregating playback data from Tautulli.
@@ -28,7 +29,11 @@ RePlex generates a "Spotify Wrapped" style year-in-review for Plex users by aggr
 - **AI Summaries**:  Generates a "brutally honest" personality roast based on watch history.
 - **Caching**: Heavy Tautulli queries are cached in SQLite for instant dashboard loading.
 
-### Setup
+## Broken? Fix it.
+If something is broken, **fix it and create a Pull Request.**  
+If you can't fix it, at least post an Issue with details. We appreciate contributions that keep the vibes going.
+
+### Setup (Local Dev)
 1. Clone repo & `npm install`
 2. `npx prisma db push`
 3. `npm run dev`
