@@ -21,9 +21,10 @@ export interface StatsResult {
     topShowByEpisodes?: { title: string; count: number };
 
     // Phase 6 Additions
-    yourStan?: { actor: string; count: number; titles: string[] }[];
+    yourStan?: { actor: string; count: number; time: number; titles: string[] }[];
     genreWheel: { genre: string; percentage: number }[];
     timeTraveler: { decade: string; count: number };
+    averageYear: number;
     bingeRecord?: { show: string; count: number; date: string };
     techStats: {
         totalDataGB: number;
@@ -106,29 +107,39 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
 
     // 2. Your Stan (Top Actor)
     // Actors are CSV string. We need to fetch all strings and process in JS.
-    // Changed logic: count unique PROJECTS (Show Name or Movie Title) instead of total plays to avoid bias from binge-watching.
     const allActorsRaw = await db.watchHistory.findMany({
         where: { ...where, actors: { not: null } },
-        select: { actors: true, mediaType: true, title: true, grandparentTitle: true }
+        select: { actors: true, mediaType: true, title: true, grandparentTitle: true, duration: true }
     });
 
     const actorProjects: Record<string, Set<string>> = {};
+    const actorDuration: Record<string, number> = {};
+
     allActorsRaw.forEach(row => {
         if (!row.actors) return;
         const projectName = row.mediaType === 'episode' ? (row.grandparentTitle || row.title) : row.title; // Fallback to title if grandparent missing for episode
+        const duration = row.duration || 0;
 
         row.actors.split(',').forEach(a => {
             const actor = a.trim();
             if (actor) {
                 if (!actorProjects[actor]) actorProjects[actor] = new Set();
                 actorProjects[actor].add(projectName);
+
+                // Add duration
+                actorDuration[actor] = (actorDuration[actor] || 0) + duration;
             }
         });
     });
 
-    let yourStan: { actor: string; count: number; titles: string[] }[] = [];
+    let yourStan: { actor: string; count: number; time: number; titles: string[] }[] = [];
     const sortedActors = Object.entries(actorProjects)
-        .map(([actor, projects]) => ({ actor, count: projects.size, titles: Array.from(projects).sort() }))
+        .map(([actor, projects]) => ({
+            actor,
+            count: projects.size,
+            time: actorDuration[actor] || 0,
+            titles: Array.from(projects).sort()
+        }))
         .sort((a, b) => b.count - a.count);
 
     if (sortedActors.length > 0) {
@@ -175,6 +186,10 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
 
     const sortedDecades = Object.entries(decadeCounts).sort((a, b) => b[1] - a[1]);
     const timeTraveler = sortedDecades.length > 0 ? { decade: sortedDecades[0][0], count: sortedDecades[0][1] } : { decade: "N/A", count: 0 };
+
+    // 4b. Your Media Age (Average Year)
+    const totalYears = decadesRaw.reduce((sum, r) => sum + (r.year || 0), 0);
+    const averageYear = decadesRaw.length > 0 ? Math.round(totalYears / decadesRaw.length) : new Date().getFullYear();
 
     // 5. Tech Stats
     const techRaw = await db.watchHistory.aggregate({
@@ -452,6 +467,7 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         yourStan,
         genreWheel,
         timeTraveler,
+        averageYear,
         bingeRecord,
         techStats: { totalDataGB, transcodePercent, topPlatforms },
         commitmentIssues: { count: uncommittedCount, titles: uncommittedTitles },

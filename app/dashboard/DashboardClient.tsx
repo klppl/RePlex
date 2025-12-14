@@ -441,40 +441,48 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                     </div>
 
                     <div className="flex flex-col gap-8">
-                        {/* 1. YOU STAN (Top 3 Bar Chart) */}
+                        {/* 1. THE USUAL SUSPECTS (Top Actors) */}
                         <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex flex-col hover:border-pink-500/50 transition duration-300">
-                            <div className="flex justify-between items-start mb-6">
-                                <h3 className="text-pink-400 uppercase tracking-widest text-sm font-bold">You Stan</h3>
-                                <div className="text-3xl opacity-50">🤩</div>
+                            <div className="flex justify-between items-start mb-1">
+                                <h3 className="text-pink-400 uppercase tracking-widest text-sm font-bold">The Usual Suspects</h3>
+                                <div className="text-3xl opacity-50">👥</div>
                             </div>
+                            <p className="text-slate-400 text-sm mb-6 italic opacity-75">The faces you couldn't stop watching.</p>
 
                             <div className="space-y-6 flex-1">
                                 {stats.yourStan && stats.yourStan.length > 0 ? (
-                                    stats.yourStan.map((s, i) => (
-                                        <div key={i} className="space-y-2 group">
-                                            <div
-                                                className="flex justify-between text-sm font-semibold cursor-pointer hover:text-pink-300 transition"
-                                                onClick={() => setExpandedActor(expandedActor === s.actor ? null : s.actor)}
-                                                title="Click to see titles"
-                                            >
-                                                <span className="text-white group-hover:underline decoration-pink-500/50 underline-offset-4">{s.actor}</span>
-                                                <span className="text-slate-400 group-hover:text-white transition">{s.count} titles <span className="text-[10px] ml-1 opacity-50">▼</span></span>
-                                            </div>
-                                            <div className="h-4 bg-slate-800 rounded-full overflow-hidden">
+                                    <>
+                                        {stats.yourStan.map((s, i) => (
+                                            <div key={i} className="space-y-2 group">
                                                 <div
-                                                    className="h-full bg-gradient-to-r from-pink-500 to-rose-400 rounded-full"
-                                                    style={{ width: `${stats.yourStan ? (s.count / stats.yourStan[0].count) * 100 : 0}%` }}
-                                                ></div>
-                                            </div>
-                                            {expandedActor === s.actor && (
-                                                <div className="mt-3 pl-4 border-l-2 border-slate-700 space-y-1 animate-in slide-in-from-top-2 fade-in duration-200">
-                                                    {s.titles.map((t, idx) => (
-                                                        <div key={idx} className="text-xs text-slate-400">{t}</div>
-                                                    ))}
+                                                    className="flex justify-between text-sm font-semibold cursor-pointer hover:text-pink-300 transition"
+                                                    onClick={() => setExpandedActor(expandedActor === s.actor ? null : s.actor)}
+                                                    title="Click to see titles"
+                                                >
+                                                    <span className="text-white group-hover:underline decoration-pink-500/50 underline-offset-4">{s.actor}</span>
+                                                    <span className="text-slate-400 group-hover:text-white transition">{s.count} titles <span className="text-[10px] ml-1 opacity-50">▼</span></span>
                                                 </div>
-                                            )}
+                                                <div className="h-4 bg-slate-800 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-gradient-to-r from-pink-500 to-rose-400 rounded-full"
+                                                        style={{ width: `${stats.yourStan ? (s.count / stats.yourStan[0].count) * 100 : 0}%` }}
+                                                    ></div>
+                                                </div>
+                                                {expandedActor === s.actor && (
+                                                    <div className="mt-3 pl-4 border-l-2 border-slate-700 space-y-1 animate-in slide-in-from-top-2 fade-in duration-200">
+                                                        {s.titles.map((t, idx) => (
+                                                            <div key={idx} className="text-xs text-slate-400">{t}</div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                        <div className="mt-6 pt-6 border-t border-slate-800 text-center">
+                                            <p className="text-slate-300">
+                                                You spent <span className="text-pink-400 font-bold">{Math.round(stats.yourStan.reduce((a, c) => a + (c.time || 0), 0) / 3600)} hours</span> with these people.
+                                            </p>
                                         </div>
-                                    ))
+                                    </>
                                 ) : (
                                     <p className="text-slate-500 text-center my-auto">No actor data.</p>
                                 )}
@@ -487,22 +495,43 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                                 <h3 className="text-emerald-400 uppercase tracking-widest text-sm font-bold">Genre Breakdown</h3>
                                 <div className="text-3xl opacity-50">🎨</div>
                             </div>
-                            <div className="space-y-6 flex-1">
-                                {stats.genreWheel.map((g, i) => (
-                                    <div key={i} className="space-y-2">
-                                        <div className="flex justify-between text-sm font-semibold">
-                                            <span className="text-white">{g.genre}</span>
-                                            <span className="text-slate-400">{g.percentage}%</span>
-                                        </div>
-                                        <div className="h-4 bg-slate-800 rounded-full overflow-hidden">
-                                            <div
-                                                className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full"
-                                                style={{ width: `${g.percentage}%` }}
-                                            ></div>
-                                        </div>
+                            <div className="flex-1">
+                                {stats.genreWheel.length > 0 ? (
+                                    <div className="grid grid-cols-12 grid-rows-2 h-64 gap-1 rounded-2xl overflow-hidden">
+                                        {stats.genreWheel.map((g, i) => {
+                                            // Colors for organic feel
+                                            const colors = ['bg-emerald-600', 'bg-teal-600', 'bg-cyan-700', 'bg-blue-700', 'bg-indigo-700'];
+                                            const color = colors[i % colors.length];
+
+                                            // Grid classes
+                                            // Item 0: Big block (Left half)
+                                            // Others: Quarter blocks (Right half)
+                                            let gridClass = "col-span-6 md:col-span-3 row-span-1";
+                                            if (i === 0) gridClass = "col-span-12 md:col-span-6 row-span-2";
+
+                                            return (
+                                                <div
+                                                    key={i}
+                                                    className={`${gridClass} ${color} relative p-4 flex flex-col justify-center items-center text-center transition hover:opacity-90 group/block cursor-default`}
+                                                >
+                                                    <div className="font-bold text-white relative z-10">
+                                                        {i === 0 ? (
+                                                            <>
+                                                                <span className="text-2xl md:text-3xl block">{g.genre}</span>
+                                                                <span className="text-sm md:text-base opacity-50 block mt-1 font-normal italic">(Again?)</span>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-sm md:text-lg">{g.genre}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-white/50 mt-1 font-mono">{g.percentage}%</div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                ))}
-                                {stats.genreWheel.length === 0 && <p className="text-slate-500 text-center my-auto">No genre data available.</p>}
+                                ) : (
+                                    <p className="text-slate-500 text-center my-auto py-12">No genre data available.</p>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -694,17 +723,18 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                         </div>
 
                         {/* TIME TRAVELER */}
-                        {stats.timeTraveler && (
+                        {/* 4. YOUR MEDIA AGE (Replaces Time Traveler) */}
+                        {stats.averageYear > 0 && (
                             <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-8 hover:border-purple-500/50 transition group">
                                 <div className="flex-1 w-full text-center md:text-left">
-                                    <h3 className="text-purple-400 uppercase tracking-widest text-sm font-bold mb-1">Time Traveler</h3>
-                                    <div className="text-5xl font-black text-white mb-2">{stats.timeTraveler.decade}</div>
+                                    <h3 className="text-purple-400 uppercase tracking-widest text-sm font-bold mb-1">Your Media Age</h3>
+                                    <div className="text-5xl font-black text-white mb-2">{stats.averageYear}</div>
                                     <p className="text-slate-400 text-sm">
-                                        {stats.timeTraveler.decade === '2020s' ? "You're stuck in this decade." : `You belong in the ${stats.timeTraveler.decade}.`}
+                                        You’re living in the past. Specifically <span className="text-purple-400 font-bold">{stats.averageYear}</span>. While everyone else is watching AI documentaries, you're rewinding VHS tapes.
                                     </p>
                                 </div>
                                 <div className="text-6xl opacity-20 group-hover:opacity-100 transition animate-pulse">
-                                    ⏳
+                                    📼
                                 </div>
                             </div>
                         )}
@@ -741,25 +771,27 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                     <div className="flex flex-col gap-8">
                         {/* Streamed */}
                         {/* Streamed -> The Retro Nightmare */}
+                        {/* Streamed -> The Retro Nightmare */}
                         <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex items-center gap-6 hover:border-emerald-500/50 transition">
                             <div className="text-4xl text-emerald-400 bg-emerald-900/10 p-4 rounded-full flex-shrink-0">📠</div>
                             <div>
                                 <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-1">The Retro Nightmare</h3>
-                                <div className="text-2xl font-bold text-white leading-tight mb-1">{stats.techStats.totalDataGB} GB</div>
-                                <p className="text-xs text-slate-400">
-                                    On a 56k modem, this download would finish in <span className="text-emerald-400 font-bold">{year + Math.round((stats.techStats.totalDataGB * 1024 * 1024 * 1024 * 8) / 56000 / 31536000)}</span>.
-                                    <br /><span className="italic opacity-50">(Hope no one picks up the phone)</span>
+                                <p className="text-lg font-bold text-white leading-tight">
+                                    On a <span className="text-emerald-400">56k modem</span>, downloading {stats.techStats.totalDataGB} GB would finish in {year + Math.round((stats.techStats.totalDataGB * 1024 * 1024 * 1024 * 8) / 56000 / 31536000)}.
+                                    <br /><span className="text-sm font-normal text-slate-500 italic opacity-50">(Hope no one picks up the phone)</span>
                                 </p>
                             </div>
                         </div>
 
-                        {/* Transcoded */}
+                        {/* Transcoded -> The Toast Index */}
                         <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex items-center gap-6 hover:border-orange-500/50 transition">
-                            <div className="text-4xl text-orange-400 bg-orange-900/10 p-4 rounded-full flex-shrink-0">💾</div>
+                            <div className="text-4xl text-orange-400 bg-orange-900/10 p-4 rounded-full flex-shrink-0">🍞</div>
                             <div>
-                                <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-1">Transcoded</h3>
-                                <div className="text-2xl font-bold text-white leading-tight mb-1">{stats.techStats.transcodePercent}%</div>
-                                <p className="text-xs text-slate-600 italic">"My CPU is burning"</p>
+                                <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-1">The Toast Index</h3>
+                                <p className="text-lg font-bold text-white leading-tight">
+                                    Your device refused to do the work, so the server had to. You forced the server's CPU to generate enough heat to toast <span className="text-orange-400">{Math.round(((stats.totalSeconds / 3600) * (stats.techStats.transcodePercent / 100) * 0.1) / 0.03).toLocaleString()} slices</span> of bread.
+                                    <br /><span className="text-sm font-normal text-slate-500 italic opacity-50">Say sorry to the admin.</span>
+                                </p>
                             </div>
                         </div>
 
