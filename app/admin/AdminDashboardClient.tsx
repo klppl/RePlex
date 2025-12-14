@@ -14,6 +14,7 @@ interface Props {
         hasAdmin: boolean;
         config: any;
         aiConfig: any;
+        mediaConfig: any;
     };
     isAuthenticated: boolean;
 }
@@ -432,7 +433,21 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                     <div className="space-y-2">
                         <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Custom Instructions / Persona</label>
                         <textarea name="aiInstructions" defaultValue={status.aiConfig?.instructions || "Analyze the user’s Plex statistics and produce a brutally honest /r/roastme-style roast. Be mean, dry, and sarcastic. No empathy, no disclaimers, no praise unless it is immediately undercut. Treat the stats as evidence of bad habits, questionable taste, avoidance of sleep, commitment issues, nostalgia addiction, or fake “good taste.” If data is missing, infer something unflattering. Write one or two short paragraphs that summarize the user as a person based solely on their viewing behavior. No emojis, no self-reference, no moral lessons. Roast choices and habits only, not protected traits. The result should be funny, uncomfortable, and very shareable."} placeholder="Analyze the user’s Plex statistics and produce a brutally honest /r/roastme-style roast..." rows={5} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-purple-500 outline-none transition" />
-                    </div>                </div>
+                    </div>
+                </div>
+
+                {/* Media Metadata Configuration */}
+                <div className="space-y-6 pt-6 border-t border-slate-800">
+                    <h3 className="text-lg font-bold text-amber-400 uppercase tracking-widest text-xs border-b border-slate-800 pb-2">Media Metadata Configuration</h3>
+                    <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">TMDB API Key</label>
+                        <input name="tmdbApiKey" type="password" defaultValue={status.mediaConfig?.tmdbApiKey || ''} placeholder="Metric tonnes of metadata..." className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-amber-500 outline-none transition" />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">TVDB API Key</label>
+                        <input name="tvdbApiKey" type="password" defaultValue={status.mediaConfig?.tvdbApiKey || ''} placeholder="Even more metadata..." className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-amber-500 outline-none transition" />
+                    </div>
+                </div>
 
                 {/* Admin Account - Only if Setup Mode (Creating New) */}
                 {view === 'setup' && !status.hasAdmin && (

@@ -515,8 +515,12 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                                                     className="flex flex-col items-center text-center cursor-pointer group"
                                                     onClick={() => setExpandedActor(expandedActor === topSuspect.actor ? null : topSuspect.actor)}
                                                 >
-                                                    <div className="w-24 h-24 rounded-full bg-yellow-500/10 border-2 border-yellow-500 flex items-center justify-center text-2xl font-black text-yellow-500 mb-3 shadow-[0_0_20px_rgba(234,179,8,0.2)] group-hover:scale-105 transition duration-300">
-                                                        {initials}
+                                                    <div className="w-24 h-24 rounded-full bg-yellow-500/10 border-2 border-yellow-500 flex items-center justify-center text-2xl font-black text-yellow-500 mb-3 shadow-[0_0_20px_rgba(234,179,8,0.2)] group-hover:scale-105 transition duration-300 overflow-hidden relative">
+                                                        {topSuspect.imageUrl ? (
+                                                            <img src={topSuspect.imageUrl} alt={topSuspect.actor} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            initials
+                                                        )}
                                                     </div>
                                                     <div className="text-xl font-bold text-white group-hover:text-yellow-400 transition">{topSuspect.actor}</div>
                                                     <div className="text-sm text-yellow-500/60 font-medium">{topSuspect.count} titles</div>
@@ -547,8 +551,12 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                                                         className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition cursor-pointer group"
                                                         onClick={() => setExpandedActor(expandedActor === s.actor ? null : s.actor)}
                                                     >
-                                                        <div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold ${colorClass}`}>
-                                                            {initials}
+                                                        <div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold ${colorClass} overflow-hidden relative`}>
+                                                            {s.imageUrl ? (
+                                                                <img src={s.imageUrl} alt={s.actor} className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                initials
+                                                            )}
                                                         </div>
                                                         <div className="flex-1 min-w-0">
                                                             <div className="text-sm font-medium text-slate-200 truncate group-hover:text-white transition">{s.actor}</div>
@@ -825,26 +833,33 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                         {stats.averageYear > 0 && (() => {
                             let diagnosis = "The Time Traveler";
                             let copy = "You're stuck in time.";
+                            let icon = "📺";
                             const y = stats.averageYear;
 
                             if (y >= 2022) {
                                 diagnosis = "Shiny Object Syndrome";
                                 copy = "You refuse to watch anything without Dolby Vision and an active marketing campaign. If it’s older than your milk, you’re not interested.";
+                                icon = "📺";
                             } else if (y >= 2015) {
                                 diagnosis = "The Algorithmic Average";
                                 copy = "You’re stuck in the peak streaming era. Your taste is perfectly curated to keep you on the couch for just... one... more... episode.";
+                                icon = "📺";
                             } else if (y >= 2000) {
                                 diagnosis = "The Digital Transition";
                                 copy = "Ah, the golden age of piracy and physical media. You miss DVD menus, Limewire, and movies that weren't just prequels to sequels.";
+                                icon = "📀";
                             } else if (y >= 1980) {
                                 diagnosis = "Certified Retro";
                                 copy = "You’re living in the past. Specifically the era of Blockbuster nights, synth-pop soundtracks, and tracking issues on the VHS tape.";
+                                icon = "📼";
                             } else if (y >= 1960) {
                                 diagnosis = "The Old School Cool";
                                 copy = "You prefer practical effects over CGI and pacing slow enough to actually check your phone. A true cinema purist (or just old).";
+                                icon = "📺";
                             } else {
                                 diagnosis = "The Historian";
                                 copy = "Do you know movies come in color now? You spent your year watching dead people talk in a transatlantic accent.";
+                                icon = "🎥";
                             }
 
                             return (
@@ -862,7 +877,7 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                                         <p className="text-[10px] text-slate-600 mt-4 uppercase tracking-widest opacity-50">Based on weighted average release year</p>
                                     </div>
                                     <div className="text-6xl opacity-20 group-hover:opacity-100 transition animate-pulse">
-                                        📼
+                                        {icon}
                                     </div>
                                 </div>
                             );

@@ -20,6 +20,12 @@ model TautulliConfig {
   rootPath String?
 }
 
+model MediaConfig {
+  id          Int     @id @default(1)
+  tmdbApiKey  String?
+  tvdbApiKey  String?
+}
+
 model AiConfig {
   id           Int     @id @default(1)
   enabled      Boolean @default(false)

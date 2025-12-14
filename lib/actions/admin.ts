@@ -133,15 +133,16 @@ export async function getSystemStatus() {
         const adminCount = await db.adminUser.count();
         const config = await db.tautulliConfig.findFirst();
         const aiConfig = await db.aiConfig.findFirst();
-        
+
         return {
             initialized: adminCount > 0 && !!config,
             hasAdmin: adminCount > 0,
             config: config,
-            aiConfig: aiConfig
+            aiConfig: aiConfig,
+            mediaConfig: await db.mediaConfig.findFirst()
         };
     } catch (error) {
-        return { initialized: false, hasAdmin: false, config: null, aiConfig: null };
+        return { initialized: false, hasAdmin: false, config: null, aiConfig: null, mediaConfig: null };
     }
 }
 
@@ -178,7 +179,20 @@ export async function saveSystemConfig(data: any) {
             await db.aiConfig.create({ data: aiData });
         }
 
-        // 3. Admin User (if creating new)
+        // 3. Media Config
+        const mediaData = {
+            tmdbApiKey: data.tmdbApiKey || null,
+            tvdbApiKey: data.tvdbApiKey || null,
+        };
+
+        const existingMedia = await db.mediaConfig.findFirst();
+        if (existingMedia) {
+            await db.mediaConfig.update({ where: { id: existingMedia.id }, data: mediaData });
+        } else {
+            await db.mediaConfig.create({ data: mediaData });
+        }
+
+        // 4. Admin User (if creating new)
         if (data.username && data.password) {
             // Simple hash replacement since I can't import bcrypt easily in this context without verification
             // In a real app we'd use bcrypt.hash(data.password, 10).

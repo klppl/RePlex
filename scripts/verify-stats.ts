@@ -90,7 +90,7 @@ async function main() {
 
     console.log('Stats Result:', JSON.stringify(stats, null, 2));
 
-    if (stats.totalSeconds >= 0 && Array.isArray(stats.topMovies)) {
+    if (stats.totalSeconds >= 0 && Array.isArray(stats.topShows)) {
         console.log("✅ Stats Engine returned valid structure.");
     } else {
         console.error("❌ Stats Engine returned invalid structure.");

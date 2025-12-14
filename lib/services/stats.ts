@@ -21,7 +21,7 @@ export interface StatsResult {
     topShowByEpisodes?: { title: string; count: number };
 
     // Phase 6 Additions
-    yourStan?: { actor: string; count: number; time: number; titles: string[] }[];
+    yourStan?: { actor: string; count: number; time: number; titles: string[]; imageUrl?: string }[];
     genreWheel: { genre: string; percentage: number }[];
     timeTraveler: { decade: string; count: number };
     averageYear: number;
@@ -135,7 +135,7 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         });
     });
 
-    let yourStan: { actor: string; count: number; time: number; titles: string[] }[] = [];
+    let yourStan: { actor: string; count: number; time: number; titles: string[]; imageUrl?: string }[] = [];
     const sortedActors = Object.entries(actorProjects)
         .map(([actor, projects]) => ({
             actor,
@@ -147,6 +147,28 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
 
     if (sortedActors.length > 0) {
         yourStan = sortedActors.slice(0, 5);
+
+        // Fetch Images from TMDB if key exists
+        const mediaConfig = await db.mediaConfig.findFirst();
+        if (mediaConfig?.tmdbApiKey) {
+            console.log("Fetching actor images from TMDB...");
+            for (const stan of yourStan) {
+                try {
+                    const searchRes = await fetch(`https://api.themoviedb.org/3/search/person?query=${encodeURIComponent(stan.actor)}&api_key=${mediaConfig.tmdbApiKey}`);
+                    if (searchRes.ok) {
+                        const data = await searchRes.json();
+                        if (data.results && data.results.length > 0) {
+                            const person = data.results[0];
+                            if (person.profile_path) {
+                                stan.imageUrl = `https://image.tmdb.org/t/p/w185${person.profile_path}`;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error(`Failed to fetch image for ${stan.actor}`, e);
+                }
+            }
+        }
     }
 
     // 3. Genre Wheel
