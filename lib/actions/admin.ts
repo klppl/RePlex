@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { hashPassword } from '../auth-admin';
 import { getStats } from '../services/stats';
 import { syncUsers } from '../services/tautulli';
+import { syncHistoryForUser } from '../services/sync';
 import { SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 
@@ -48,7 +49,7 @@ export async function getAdminUsers(): Promise<AdminUserType[]> {
 
 // --- GENERATION ACTIONS ---
 
-import { syncHistoryForUser } from '../services/sync';
+
 
 export async function generateUserStats(userId: number) {
     try {
@@ -109,13 +110,15 @@ export async function deleteUser(userId: number) {
     }
 }
 
-export async function purgeSystem() {
+export async function purgeAllData() {
     try {
         // Nuke everything
         await db.watchHistory.deleteMany({});
         await db.syncLog.deleteMany({});
         await db.user.deleteMany({});
         await db.tautulliConfig.deleteMany({});
+        await db.aiConfig.deleteMany({});
+        await db.mediaConfig.deleteMany({});
         await db.adminUser.deleteMany({}); // Removing admin triggers /setup redirect
 
         revalidatePath('/');
@@ -239,5 +242,46 @@ export async function syncTautulliUsers() {
     } catch (error: any) {
         console.error("Sync failed:", error);
         return { success: false, error: error.message };
+    }
+}
+
+export async function syncAllUsersHistory() {
+    try {
+        const users = await db.user.findMany({
+            where: { isActive: true }
+        });
+
+        // Current Year Logic
+        const now = new Date();
+        const startOfYear = new Date(now.getFullYear(), 0, 1); // Jan 1st
+        const endOfYear = new Date(now.getFullYear(), 11, 31); // Dec 31st
+
+        console.log(`[ADMIN] Starting global sync for ${users.length} users...`);
+
+        let successCount = 0;
+        let failCount = 0;
+        let totalEntries = 0;
+
+        for (const user of users) {
+            try {
+                console.log(`[ADMIN] Syncing history for ${user.username}...`);
+                const res = await syncHistoryForUser(user.id, startOfYear, endOfYear);
+                totalEntries += res.totalEntries;
+                successCount++;
+            } catch (e: any) {
+                console.error(`[ADMIN] Failed to sync ${user.username}:`, e.message);
+                failCount++;
+            }
+        }
+
+        return {
+            success: true,
+            summary: `Synced ${successCount} users (${totalEntries} entries). Failed: ${failCount}`,
+            details: { successCount, failCount, totalEntries }
+        };
+
+    } catch (error: any) {
+        console.error("Global Sync failed:", error);
+        return { success: false, error: error.message || "Global Sync failed" };
     }
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { AdminUserType, deleteUser, purgeSystem, saveSystemConfig, generateUserStats, generateAllStats, syncTautulliUsers } from '@/lib/actions/admin';
+import { AdminUserType, purgeAllData, syncTautulliUsers, syncAllUsersHistory, saveSystemConfig, deleteUser, generateUserStats, generateAllStats } from "@/lib/actions/admin";
 import { formatDistanceToNow } from 'date-fns';
 
 type AdminView = 'users' | 'settings' | 'setup' | 'login';
@@ -109,7 +109,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
 
     const handlePurge = async () => {
         setIsPurging(true);
-        const res = await purgeSystem();
+        const res = await purgeAllData();
         if (res.success) {
             window.location.reload();
         } else {
@@ -148,6 +148,25 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
     };
 
 
+
+    const [syncingAll, setSyncingAll] = useState(false);
+    const handleSyncAll = async () => {
+        setSyncingAll(true);
+        try {
+            const res = await syncAllUsersHistory();
+            if (res.success) {
+                alert(res.summary);
+                setUsers(users.map(u => ({ ...u }))); // Force re-render if needed
+                window.location.reload();
+            } else {
+                alert(`Sync failed: ${res.error}`);
+            }
+        } catch (e) {
+            alert("Sync failed unexpectedly.");
+        } finally {
+            setSyncingAll(false);
+        }
+    };
 
     const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -460,6 +479,32 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                         <div className="space-y-2">
                             <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Password</label>
                             <input name="password" type="password" required className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none transition" />
+                        </div>
+                    </div>
+                )}
+
+                {/* Maintenance Section - Only show when not in setup mode */}
+                {view !== 'setup' && (
+                    <div className="space-y-6 pt-8 border-t border-slate-800">
+                        <h3 className="text-lg font-bold text-blue-400 uppercase tracking-widest text-xs border-b border-slate-800 pb-2">Maintenance</h3>
+
+                        <div className="bg-slate-950/30 p-6 rounded-xl border border-blue-500/10 flex items-center justify-between gap-4">
+                            <div>
+                                <h4 className="text-white font-bold mb-1">Pre-fetch User History</h4>
+                                <p className="text-slate-400 text-sm">
+                                    Download all history for the current year for ALL active users. This makes the user dashboard load instantly.
+                                    <br />
+                                    <span className="text-xs text-slate-500 italic">Warning: This may take a while depending on the number of users.</span>
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleSyncAll}
+                                disabled={syncingAll}
+                                className="px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition disabled:opacity-50 flex-shrink-0"
+                            >
+                                {syncingAll ? 'Syncing...' : 'Sync All Data'}
+                            </button>
                         </div>
                     </div>
                 )}
