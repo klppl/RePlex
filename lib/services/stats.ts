@@ -12,7 +12,8 @@ export interface StatsResult {
     };
     activityType: {
         winner: string;
-        chartData: { night: number; morning: number; day: number };
+        description: string;
+        breakdown: { label: string; value: number }[];
     };
     oldestMovie?: { title: string; year: number };
     oldestShow?: { title: string; year: number };
@@ -364,25 +365,63 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         GROUP BY hour
         ORDER BY total DESC
     `;
-    let vibe = "Balanced";
     let night = 0, morning = 0, day = 0;
     hourlyRaw.forEach((r: any) => {
         const h = parseInt(r.hour);
-        const t = Number(r.total);
-        if (h >= 22 || h < 5) night += t; else if (h >= 5 && h < 11) morning += t; else day += t;
+        const val = Number(r.total);
+        if (h >= 5 && h < 11) morning += val;
+        else if (h >= 11 && h < 22) day += val;
+        else night += val;
     });
 
-    // Determine Winner
-    if (night > morning && night > day) vibe = "Night Owl";
-    else if (morning > night && morning > day) vibe = "Early Bird";
+    // Calculate Percentages
+    const totalHours = (night + morning + day) || 1; // Avoid div by 0
+    const mornPct = morning / totalHours;
+    const dayPct = day / totalHours;
+    const nightPct = night / totalHours;
+
+    let vibe = "The Casual Viewer";
+    let vibeDesc = "A little bit of everything.";
+
+    const DOMINANT_THRESHOLD = 0.50;
+    const BALANCED_VARIANCE = 0.15;
+    const MORN_THRESHOLD = 0.40;
+
+    const maxPct = Math.max(mornPct, dayPct, nightPct);
+    const minPct = Math.min(mornPct, dayPct, nightPct);
+
+    // Logic Implementation
+    if ((maxPct - minPct) < BALANCED_VARIANCE) {
+        vibe = "The Zen Master";
+        vibeDesc = "Perfect harmony. You watch content when you want, without bias.";
+    } else if (nightPct > DOMINANT_THRESHOLD) {
+        vibe = "The Vampire";
+        vibeDesc = "The sun is your enemy. Screen time increases as the world goes dark.";
+    } else if (dayPct > DOMINANT_THRESHOLD) {
+        vibe = "The Daydreamer";
+        vibeDesc = "You max out your entertainment while the sun is up.";
+    } else if (mornPct > MORN_THRESHOLD) {
+        vibe = "The Early Bird";
+        vibeDesc = "Cartoons with cereal? You start your day with a play button.";
+    } else {
+        // Fallback for "Casual Viewer" but with dynamic text
+        if (dayPct > nightPct) {
+            vibe = "The Daytime Dweller";
+            vibeDesc = "You prefer the light, but you aren't afraid of the dark.";
+        } else {
+            vibe = "The Night Owl";
+            vibeDesc = "You lean towards the evening, but aren't fully nocturnal yet.";
+        }
+    }
 
     const activityType = {
         winner: vibe,
-        chartData: {
-            night: Math.round(night / 3600),
-            morning: Math.round(morning / 3600),
-            day: Math.round(day / 3600)
-        }
+        description: vibeDesc,
+        breakdown: [
+            { label: 'Morning', value: morning }, // 5am - 11am
+            { label: 'Day', value: day },         // 11am - 10pm
+            { label: 'Night', value: night }      // 10pm - 5am
+        ]
     };
 
     // ... Longest Break ...

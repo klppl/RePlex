@@ -763,9 +763,7 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                                         <h3 className="text-yellow-400 uppercase tracking-widest text-sm font-bold mb-1">Vibe Check</h3>
                                         <div className="text-4xl font-black text-white">{stats.activityType.winner}</div>
                                         <p className="text-slate-400 text-sm mt-3 leading-relaxed max-w-md mx-auto md:mx-0">
-                                            {stats.activityType.winner === 'Night Owl' && "You watch the most between 22:00 and 05:00."}
-                                            {stats.activityType.winner === 'Early Bird' && "You watch the most between 05:00 and 11:00."}
-                                            {stats.activityType.winner === 'Balanced' && "You watch the most during the day (11:00 to 22:00)."}
+                                            {stats.activityType.description}
                                         </p>
                                     </div>
                                     <div className="text-4xl opacity-20 group-hover:opacity-100 transition absolute right-0 top-0">🌙</div>
@@ -775,7 +773,14 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                             <div className="flex items-center gap-6 flex-shrink-0">
                                 {/* Simple CSS Conic Gradient Donut */}
                                 {(() => {
-                                    const { night, morning, day } = stats.activityType.chartData;
+                                    const morningData = stats.activityType.breakdown.find(b => b.label === 'Morning') || { value: 0 };
+                                    const dayData = stats.activityType.breakdown.find(b => b.label === 'Day') || { value: 0 };
+                                    const nightData = stats.activityType.breakdown.find(b => b.label === 'Night') || { value: 0 };
+
+                                    const morning = morningData.value;
+                                    const day = dayData.value;
+                                    const night = nightData.value;
+
                                     const total = night + morning + day || 1;
                                     const pNight = (night / total) * 100;
                                     const pMorning = (morning / total) * 100;
@@ -786,7 +791,7 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                                             <div className="relative w-40 h-40 rounded-full flex items-center justify-center shadow-2xl flex-shrink-0"
                                                 style={{
                                                     background: `conic-gradient(
-                                                        #3b82f6 0% ${pDay}%, 
+                                                        #22d3ee 0% ${pDay}%, 
                                                         #fbbf24 ${pDay}% ${pDay + pMorning}%, 
                                                         #6366f1 ${pDay + pMorning}% 100%
                                                     )`
@@ -795,7 +800,7 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                                                 {/* Inner cutout */}
                                                 <div className="w-28 h-28 bg-slate-900 rounded-full flex flex-col items-center justify-center z-10 shadow-inner">
                                                     <div className="text-xs text-slate-500 font-bold uppercase tracking-widest">Total</div>
-                                                    <div className="text-white font-bold text-xl">{Math.round(total)}h</div>
+                                                    <div className="text-white font-bold text-xl">{Math.round(total / 3600)}h</div>
                                                 </div>
                                             </div>
 
@@ -805,19 +810,22 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                                                     <div className="flex items-center gap-2 text-indigo-400 font-bold">
                                                         <div className="w-3 h-3 rounded-full bg-indigo-500"></div> Night 🌙
                                                     </div>
-                                                    <div className="text-xs text-slate-500 ml-5">{Math.round(night)}h ({Math.round(pNight)}%)</div>
+                                                    <div className="text-[10px] text-slate-600 ml-5 font-mono mb-0.5">22:00 - 05:00</div>
+                                                    <div className="text-xs text-slate-500 ml-5">{Math.round(night / 3600)}h ({Math.round(pNight)}%)</div>
                                                 </div>
                                                 <div className="flex flex-col">
                                                     <div className="flex items-center gap-2 text-amber-400 font-bold">
-                                                        <div className="w-3 h-3 rounded-full bg-amber-400"></div> Morn 🌅
+                                                        <div className="w-3 h-3 rounded-full bg-amber-400"></div> Morning 🌅
                                                     </div>
-                                                    <div className="text-xs text-slate-500 ml-5">{Math.round(morning)}h ({Math.round(pMorning)}%)</div>
+                                                    <div className="text-[10px] text-slate-600 ml-5 font-mono mb-0.5">05:00 - 11:00</div>
+                                                    <div className="text-xs text-slate-500 ml-5">{Math.round(morning / 3600)}h ({Math.round(pMorning)}%)</div>
                                                 </div>
                                                 <div className="flex flex-col">
-                                                    <div className="flex items-center gap-2 text-blue-400 font-bold">
-                                                        <div className="w-3 h-3 rounded-full bg-blue-500"></div> Day ☀️
+                                                    <div className="flex items-center gap-2 text-cyan-400 font-bold">
+                                                        <div className="w-3 h-3 rounded-full bg-cyan-400"></div> Day ☀️
                                                     </div>
-                                                    <div className="text-xs text-slate-500 ml-5">{Math.round(day)}h ({Math.round(pDay)}%)</div>
+                                                    <div className="text-[10px] text-slate-600 ml-5 font-mono mb-0.5">11:00 - 22:00</div>
+                                                    <div className="text-xs text-slate-500 ml-5">{Math.round(day / 3600)}h ({Math.round(pDay)}%)</div>
                                                 </div>
                                             </div>
                                         </>
