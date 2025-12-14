@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 export interface StatsResult {
     totalDuration: string;
     totalSeconds: number;
-    topMovies: { title: string; duration: number; count: number; year: number }[];
+
     topShows: { title: string; duration: number }[];
     lazyDay: {
         winner: { day: string; hours: number };
@@ -25,6 +25,7 @@ export interface StatsResult {
     genreWheel: { genre: string; percentage: number }[];
     timeTraveler: { decade: string; count: number };
     averageYear: number;
+    totalBandwidth: number;
     bingeRecord?: { show: string; count: number; date: string };
     techStats: {
         totalDataGB: number;
@@ -75,29 +76,31 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     };
 
     // 1. Existing Stats (Condensed)
-    const splitAgg = await db.watchHistory.groupBy({ by: ['mediaType'], _sum: { duration: true }, where });
-    let movieSeconds = 0, showSeconds = 0;
+    const splitAgg = await db.watchHistory.groupBy({
+        by: ['mediaType'],
+        where,
+        _sum: { duration: true, fileSize: true }
+    });
+
+    let movieSeconds = 0;
+    let showSeconds = 0;
+    let totalBandwidth = 0;
+
     splitAgg.forEach(c => {
         const s = c._sum.duration || 0;
+        const size = Number(c._sum.fileSize || 0); // BigInt to Number (safe for display, might lose precision for petabytes but fine here)
+
         if (c.mediaType === 'movie') movieSeconds += s;
         else if (c.mediaType === 'episode') showSeconds += s;
+
+        totalBandwidth += size;
     });
     const totalSeconds = movieSeconds + showSeconds;
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const totalDuration = `${hours}h ${minutes}m`;
 
-    // 2. Top Replayed Movies (Count > 1, Top 10)
-    const topMoviesRaw = await db.watchHistory.groupBy({
-        by: ['title', 'year'],
-        where: { ...where, mediaType: 'movie' },
-        _sum: { duration: true },
-        _count: { id: true },
-        orderBy: { _count: { id: 'desc' } },
-        having: { id: { _count: { gt: 1 } } },
-        take: 10
-    });
-    const topMovies = topMoviesRaw.map(m => ({ title: m.title, duration: m._sum.duration || 0, count: m._count.id, year: m.year || 0 }));
+
 
     // Simplification: removed topShows as requested
     const topShows: { title: string; duration: number }[] = [];
@@ -143,7 +146,7 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         .sort((a, b) => b.count - a.count);
 
     if (sortedActors.length > 0) {
-        yourStan = sortedActors.slice(0, 3);
+        yourStan = sortedActors.slice(0, 5);
     }
 
     // 3. Genre Wheel
@@ -407,7 +410,6 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
             const statsContext = {
                 user: { id: userId, year },
                 totalDuration,
-                topMovies: topMovies, // Send all top 10
                 lazyDay,
                 vibe: activityType,
                 stan: yourStan, // Send all top 3
@@ -460,7 +462,7 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     const totalValue = Math.round(movieValue + tvValue);
 
     const result: StatsResult = {
-        totalDuration, totalSeconds, topMovies, topShows, lazyDay, activityType,
+        totalDuration, totalSeconds, topShows, lazyDay, activityType,
         oldestMovie: oldestMovieRaw ? { title: oldestMovieRaw.title, year: oldestMovieRaw.year! } : undefined,
         oldestShow: oldestShowRaw ? { title: oldestShowRaw.grandparentTitle!, year: oldestShowRaw.year! } : undefined,
         longestBreak, mediaTypeSplit: { movies: movieSeconds, shows: showSeconds }, topShowByEpisodes,
@@ -468,6 +470,7 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         genreWheel,
         timeTraveler,
         averageYear,
+        totalBandwidth,
         bingeRecord,
         techStats: { totalDataGB, transcodePercent, topPlatforms },
         commitmentIssues: { count: uncommittedCount, titles: uncommittedTitles },

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { StatCard } from '../components/StatCard';
 import { StatsResult } from '@/lib/services/stats';
+import { Router } from 'lucide-react';
 
 interface DashboardClientProps {
     initialStats: StatsResult;
@@ -431,6 +432,59 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                             </div>
                         </div>
                     )}
+
+                    {/* 8. BANDWIDTH CONSUMED (Moved to Top) */}
+                    <div className="mt-8">
+                        {/* The ISP Enemy (Redesigned) */}
+                        <div className="bg-slate-900 p-12 rounded-3xl border border-slate-800 hover:border-orange-500/50 transition group relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition transform group-hover:scale-110 duration-700 text-orange-500">
+                                <Router size={160} strokeWidth={1} />
+                            </div>
+
+                            <h3 className="text-orange-400 uppercase tracking-widest text-sm font-bold mb-4">Bandwidth Consumed</h3>
+
+                            {(() => {
+                                const gb = (stats.totalBandwidth || 0) / (1024 * 1024 * 1024);
+                                const tb = gb / 1024;
+                                let displayVal = `${Math.round(gb).toLocaleString()} GB`;
+                                if (tb >= 10) displayVal = `${tb.toFixed(1)} TB`;
+                                else if (tb >= 1) displayVal = `${tb.toFixed(2)} TB`;
+
+                                let title = "The Ghost";
+                                let text = "Your ISP thinks this house is vacant. You barely scratched the copper cables.";
+
+                                if (gb >= 50000) {
+                                    title = "The Backbone Provider";
+                                    text = "Congratulations, you are now legally considered a data center. The neighborhood dimming lights? That’s you downloading a 4K remux.";
+                                } else if (gb >= 10000) {
+                                    title = "The Throttled One";
+                                    text = "You are the reason 'Unlimited Data' now has an asterisk (*). Support definitely put a 'Do Not Answer' note on your file.";
+                                } else if (gb >= 2000) {
+                                    title = "The Profit Killer";
+                                    text = "You pulled terabytes down the pipe. Your ISP has likely pinned a picture of your router on their office dartboard.";
+                                } else if (gb >= 500) {
+                                    title = "The Average Joe";
+                                    text = "You’re flying under the radar. Your ISP loves you: you pay full price but barely use the pipes.";
+                                }
+
+                                return (
+                                    <div className="relative z-10">
+                                        <div className="text-6xl md:text-8xl font-black text-white mb-4 tracking-tighter">
+                                            {displayVal}
+                                        </div>
+                                        <div className="mb-4">
+                                            <span className="inline-block bg-orange-500/10 text-orange-400 border border-orange-500/20 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
+                                                {title}
+                                            </span>
+                                        </div>
+                                        <p className="text-xl text-slate-400 max-w-2xl">
+                                            {text}
+                                        </p>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    </div>
                 </section>
 
                 {/* PERSONALITY & DEEP DIVE (Consolidated DNA) */}
@@ -449,34 +503,77 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                             </div>
                             <p className="text-slate-400 text-sm mb-6 italic opacity-75">The faces you couldn't stop watching.</p>
 
-                            <div className="space-y-6 flex-1">
+                            <div className="space-y-8 flex-1">
                                 {stats.yourStan && stats.yourStan.length > 0 ? (
                                     <>
-                                        {stats.yourStan.map((s, i) => (
-                                            <div key={i} className="space-y-2 group">
+                                        {/* TOP SUSPECT */}
+                                        {(() => {
+                                            const topSuspect = stats.yourStan[0];
+                                            const initials = topSuspect.actor.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                                            return (
                                                 <div
-                                                    className="flex justify-between text-sm font-semibold cursor-pointer hover:text-pink-300 transition"
-                                                    onClick={() => setExpandedActor(expandedActor === s.actor ? null : s.actor)}
-                                                    title="Click to see titles"
+                                                    className="flex flex-col items-center text-center cursor-pointer group"
+                                                    onClick={() => setExpandedActor(expandedActor === topSuspect.actor ? null : topSuspect.actor)}
                                                 >
-                                                    <span className="text-white group-hover:underline decoration-pink-500/50 underline-offset-4">{s.actor}</span>
-                                                    <span className="text-slate-400 group-hover:text-white transition">{s.count} titles <span className="text-[10px] ml-1 opacity-50">▼</span></span>
-                                                </div>
-                                                <div className="h-4 bg-slate-800 rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-gradient-to-r from-pink-500 to-rose-400 rounded-full"
-                                                        style={{ width: `${stats.yourStan ? (s.count / stats.yourStan[0].count) * 100 : 0}%` }}
-                                                    ></div>
-                                                </div>
-                                                {expandedActor === s.actor && (
-                                                    <div className="mt-3 pl-4 border-l-2 border-slate-700 space-y-1 animate-in slide-in-from-top-2 fade-in duration-200">
-                                                        {s.titles.map((t, idx) => (
-                                                            <div key={idx} className="text-xs text-slate-400">{t}</div>
-                                                        ))}
+                                                    <div className="w-24 h-24 rounded-full bg-yellow-500/10 border-2 border-yellow-500 flex items-center justify-center text-2xl font-black text-yellow-500 mb-3 shadow-[0_0_20px_rgba(234,179,8,0.2)] group-hover:scale-105 transition duration-300">
+                                                        {initials}
                                                     </div>
-                                                )}
+                                                    <div className="text-xl font-bold text-white group-hover:text-yellow-400 transition">{topSuspect.actor}</div>
+                                                    <div className="text-sm text-yellow-500/60 font-medium">{topSuspect.count} titles</div>
+
+                                                    {expandedActor === topSuspect.actor && (
+                                                        <div className="mt-4 p-4 bg-slate-950/50 rounded-xl w-full text-left animate-in slide-in-from-top-2 fade-in duration-200">
+                                                            {topSuspect.titles.slice(0, 5).map((t, idx) => (
+                                                                <div key={idx} className="text-xs text-slate-400 py-1 border-b border-white/5 last:border-0">{t}</div>
+                                                            ))}
+                                                            {topSuspect.titles.length > 5 && <div className="text-[10px] text-slate-600 italic mt-2">and {topSuspect.titles.length - 5} more...</div>}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+
+                                        {/* ACCOMPLICES */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {stats.yourStan.slice(1).map((s, i) => {
+                                                const initials = s.actor.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                                                // Rotate colors
+                                                const colors = ['text-pink-400 bg-pink-400/10', 'text-cyan-400 bg-cyan-400/10', 'text-indigo-400 bg-indigo-400/10', 'text-emerald-400 bg-emerald-400/10'];
+                                                const colorClass = colors[i % colors.length];
+
+                                                return (
+                                                    <div
+                                                        key={i}
+                                                        className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition cursor-pointer group"
+                                                        onClick={() => setExpandedActor(expandedActor === s.actor ? null : s.actor)}
+                                                    >
+                                                        <div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold ${colorClass}`}>
+                                                            {initials}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="text-sm font-medium text-slate-200 truncate group-hover:text-white transition">{s.actor}</div>
+                                                            <div className="text-xs text-slate-500">{s.count} titles</div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* EXPANDED VIEW FOR ACCOMPLICES (Shared area or just implied they click?) 
+                                            Actually, rendering expanded details inside the grid might break layout. 
+                                            Let's render a shared detail box if an accomplice is selected.
+                                        */}
+                                        {expandedActor && stats.yourStan.slice(1).find(s => s.actor === expandedActor) && (
+                                            <div className="mt-2 p-4 bg-slate-950/50 rounded-xl animate-in slide-in-from-top-2 fade-in duration-200">
+                                                <h4 className="text-xs font-bold text-slate-300 mb-2 uppercase tracking-wider">
+                                                    {expandedActor}'s appearances
+                                                </h4>
+                                                {stats.yourStan.find(s => s.actor === expandedActor)?.titles.slice(0, 5).map((t, idx) => (
+                                                    <div key={idx} className="text-xs text-slate-400 py-1 border-b border-white/5 last:border-0">{t}</div>
+                                                ))}
                                             </div>
-                                        ))}
+                                        )}
+
                                         <div className="mt-6 pt-6 border-t border-slate-800 text-center">
                                             <p className="text-slate-300">
                                                 You spent <span className="text-pink-400 font-bold">{Math.round(stats.yourStan.reduce((a, c) => a + (c.time || 0), 0) / 3600)} hours</span> with these people.
@@ -724,20 +821,52 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
 
                         {/* TIME TRAVELER */}
                         {/* 4. YOUR MEDIA AGE (Replaces Time Traveler) */}
-                        {stats.averageYear > 0 && (
-                            <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-8 hover:border-purple-500/50 transition group">
-                                <div className="flex-1 w-full text-center md:text-left">
-                                    <h3 className="text-purple-400 uppercase tracking-widest text-sm font-bold mb-1">Your Media Age</h3>
-                                    <div className="text-5xl font-black text-white mb-2">{stats.averageYear}</div>
-                                    <p className="text-slate-400 text-sm">
-                                        You’re living in the past. Specifically <span className="text-purple-400 font-bold">{stats.averageYear}</span>. While everyone else is watching AI documentaries, you're rewinding VHS tapes.
-                                    </p>
+                        {/* 4. YOUR MEDIA AGE (Replaces Time Traveler) */}
+                        {stats.averageYear > 0 && (() => {
+                            let diagnosis = "The Time Traveler";
+                            let copy = "You're stuck in time.";
+                            const y = stats.averageYear;
+
+                            if (y >= 2022) {
+                                diagnosis = "Shiny Object Syndrome";
+                                copy = "You refuse to watch anything without Dolby Vision and an active marketing campaign. If it’s older than your milk, you’re not interested.";
+                            } else if (y >= 2015) {
+                                diagnosis = "The Algorithmic Average";
+                                copy = "You’re stuck in the peak streaming era. Your taste is perfectly curated to keep you on the couch for just... one... more... episode.";
+                            } else if (y >= 2000) {
+                                diagnosis = "The Digital Transition";
+                                copy = "Ah, the golden age of piracy and physical media. You miss DVD menus, Limewire, and movies that weren't just prequels to sequels.";
+                            } else if (y >= 1980) {
+                                diagnosis = "Certified Retro";
+                                copy = "You’re living in the past. Specifically the era of Blockbuster nights, synth-pop soundtracks, and tracking issues on the VHS tape.";
+                            } else if (y >= 1960) {
+                                diagnosis = "The Old School Cool";
+                                copy = "You prefer practical effects over CGI and pacing slow enough to actually check your phone. A true cinema purist (or just old).";
+                            } else {
+                                diagnosis = "The Historian";
+                                copy = "Do you know movies come in color now? You spent your year watching dead people talk in a transatlantic accent.";
+                            }
+
+                            return (
+                                <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-8 hover:border-purple-500/50 transition group">
+                                    <div className="flex-1 w-full text-center md:text-left">
+                                        <h3 className="text-purple-400 uppercase tracking-widest text-sm font-bold mb-1">Your Media Era</h3>
+                                        <div className="text-5xl font-black text-white mb-2">{stats.averageYear}</div>
+
+                                        <div className="mb-2">
+                                            <span className="text-purple-400 font-bold text-lg block">{diagnosis}</span>
+                                        </div>
+                                        <p className="text-slate-400 text-sm">
+                                            {copy}
+                                        </p>
+                                        <p className="text-[10px] text-slate-600 mt-4 uppercase tracking-widest opacity-50">Based on weighted average release year</p>
+                                    </div>
+                                    <div className="text-6xl opacity-20 group-hover:opacity-100 transition animate-pulse">
+                                        📼
+                                    </div>
                                 </div>
-                                <div className="text-6xl opacity-20 group-hover:opacity-100 transition animate-pulse">
-                                    📼
-                                </div>
-                            </div>
-                        )}
+                            );
+                        })()}
                     </div>
 
                     {/* 5. BIG STATS (Longest Break, Most Episodes) */}
@@ -769,17 +898,49 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
 
                     {/* 6. TECH STATS (Redesigned) */}
                     <div className="flex flex-col gap-8">
-                        {/* Streamed */}
-                        {/* Streamed -> The Retro Nightmare */}
-                        {/* Streamed -> The Retro Nightmare */}
-                        <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex items-center gap-6 hover:border-emerald-500/50 transition">
-                            <div className="text-4xl text-emerald-400 bg-emerald-900/10 p-4 rounded-full flex-shrink-0">📠</div>
-                            <div>
-                                <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-1">The Retro Nightmare</h3>
-                                <p className="text-lg font-bold text-white leading-tight">
-                                    On a <span className="text-emerald-400">56k modem</span>, downloading {stats.techStats.totalDataGB} GB would finish in {year + Math.round((stats.techStats.totalDataGB * 1024 * 1024 * 1024 * 8) / 56000 / 31536000)}.
-                                    <br /><span className="text-sm font-normal text-slate-500 italic opacity-50">(Hope no one picks up the phone)</span>
-                                </p>
+                        {/* The ISP Enemy (Replaces The Retro Nightmare) */}
+                        <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex items-center gap-6 hover:border-orange-500/50 transition cursor-help group relative">
+                            <div className="text-4xl text-orange-400 bg-orange-900/10 p-4 rounded-full flex-shrink-0">✂️</div>
+                            <div className="flex-1">
+                                {(() => {
+                                    const gb = (stats.totalBandwidth || 0) / (1024 * 1024 * 1024);
+                                    const tb = gb / 1024;
+                                    let displayVal = `${Math.round(gb).toLocaleString()} GB`;
+                                    if (tb >= 10) displayVal = `${tb.toFixed(1)} TB`;
+                                    else if (tb >= 1) displayVal = `${tb.toFixed(2)} TB`;
+
+                                    let title = "The Ghost";
+                                    let text = "Your ISP thinks this house is vacant. You barely scratched the copper cables.";
+
+                                    if (gb >= 50000) {
+                                        title = "The Backbone Provider";
+                                        text = "Congratulations, you are now legally considered a data center. The neighborhood dimming lights? That’s you downloading a 4K remux.";
+                                    } else if (gb >= 10000) {
+                                        title = "The Throttled One";
+                                        text = "You are the reason 'Unlimited Data' now has an asterisk (*). Support definitely put a 'Do Not Answer' note on your file.";
+                                    } else if (gb >= 2000) {
+                                        title = "The Profit Killer";
+                                        text = "You pulled terabytes down the pipe. Your ISP has likely pinned a picture of your router on their office dartboard.";
+                                    } else if (gb >= 500) {
+                                        title = "The Average Joe";
+                                        text = "You’re flying under the radar. Your ISP loves you: you pay full price but barely use the pipes.";
+                                    }
+
+                                    return (
+                                        <>
+                                            <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-1">Bandwidth Consumed</h3>
+                                            <p className="text-lg font-bold text-white leading-tight">
+                                                You pulled <span className="text-orange-400">{displayVal}</span> down the pipe.
+                                                <span className="block text-slate-400 text-sm font-normal mt-2 opacity-80">{text}</span>
+                                            </p>
+
+                                            {/* Tooltip diagnosis */}
+                                            <div className="absolute top-0 right-0 mt-4 mr-4 bg-orange-500/10 px-3 py-1 rounded-full border border-orange-500/20 hidden md:block">
+                                                <span className="text-xs font-bold text-orange-400 uppercase tracking-widest">{title}</span>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
                             </div>
                         </div>
 
@@ -821,38 +982,7 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
 
 
 
-                {/* TOP REPLAYED MOVIES (List) */}
-                <section className="space-y-8">
-                    <div className="flex items-center gap-4 mb-4">
-                        <span className="text-4xl">🎬</span>
-                        <h2 className="text-3xl font-bold">Most Replayed Movies <span className="text-sm font-normal text-slate-500 ml-2">(Watched more than once)</span></h2>
-                    </div>
 
-                    <div className="grid gap-4">
-                        {stats.topMovies.length > 0 ? stats.topMovies.map((m, i) => (
-                            <div key={i} className="flex items-center p-6 bg-slate-900 border border-slate-800 rounded-2xl hover:border-emerald-500/50 hover:bg-slate-800 transition duration-300 group">
-                                <div className="w-12 h-12 flex items-center justify-center bg-slate-800 rounded-full text-xl font-bold text-slate-500 group-hover:text-emerald-400 group-hover:bg-slate-950 transition">
-                                    #{i + 1}
-                                </div>
-                                <div className="ml-6 flex-1">
-                                    <h3 className="text-xl font-semibold text-white group-hover:text-emerald-300 transition">{m.title}</h3>
-                                    <p className="text-slate-500 text-sm">
-                                        {m.year > 0 && <span className="mr-3">{m.year}</span>}
-                                        <span className="text-emerald-500 font-bold">{m.count} plays</span>
-                                    </p>
-                                </div>
-                                <div className="text-slate-400 font-mono text-sm text-right">
-                                    <div>{Math.round(m.duration / 60)} mins</div>
-                                    <div className="text-xs text-slate-600 uppercase tracking-wider">Total Time</div>
-                                </div>
-                            </div>
-                        )) : (
-                            <div className="p-8 text-center text-slate-500 bg-slate-900 rounded-2xl border border-slate-800 border-dashed">
-                                You haven't rewatched any movies yet.
-                            </div>
-                        )}
-                    </div>
-                </section>
 
             </main>
         </div >
