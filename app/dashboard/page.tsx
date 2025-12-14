@@ -13,6 +13,8 @@ export const metadata: Metadata = {
 // We will treat this as a Server Component.
 import { headers } from 'next/headers';
 
+import { verifyAdminSession } from '@/lib/auth-admin';
+
 export default async function DashboardPage({
     searchParams,
 }: {
@@ -25,8 +27,16 @@ export default async function DashboardPage({
     // Check headers from middleware (SSO)
     const headerList = await headers();
     const headerId = headerList.get('x-user-id');
-    if (!userId && headerId) {
-        userId = Number(headerId);
+    const adminSession = await verifyAdminSession();
+
+    if (headerId) {
+        if (!adminSession) {
+            // Fix IDOR: If logged in as User and NOT Admin, FORCE own stats.
+            userId = Number(headerId);
+        } else if (!userId) {
+            // If Admin but no param, default to self if applicable
+            userId = Number(headerId);
+        }
     }
 
     if (!userId) {

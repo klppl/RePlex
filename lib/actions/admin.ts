@@ -2,7 +2,7 @@
 
 import db from '../db';
 import { revalidatePath } from 'next/cache';
-import { hashPassword } from '../auth-admin';
+import { hashPassword, verifyAdminSession } from '../auth-admin';
 import { getStats } from '../services/stats';
 import { syncUsers } from '../services/tautulli';
 import { syncHistoryForUser } from '../services/sync';
@@ -10,6 +10,7 @@ import { SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'changeme');
+const MASK = "••••••••";
 
 export interface AdminUserType {
     id: number;
@@ -23,6 +24,11 @@ export interface AdminUserType {
 
 export async function getAdminUsers(): Promise<AdminUserType[]> {
     try {
+        const session = await verifyAdminSession();
+        if (!session) {
+            return [];
+        }
+
         const users = await db.user.findMany({
             include: {
                 _count: {
@@ -53,6 +59,9 @@ export async function getAdminUsers(): Promise<AdminUserType[]> {
 
 export async function generateUserStats(userId: number) {
     try {
+        const session = await verifyAdminSession();
+        if (!session) throw new Error("Unauthorized");
+
         // 1. Sync History First (Current Year)
         // Wrapperr is typically annual, so we sync the current year.
         const year = new Date().getFullYear();
@@ -76,6 +85,9 @@ export async function generateUserStats(userId: number) {
 
 export async function generateAllStats() {
     try {
+        const session = await verifyAdminSession();
+        if (!session) throw new Error("Unauthorized");
+
         const users = await db.user.findMany({ select: { id: true } });
         let errors = 0;
 
@@ -97,6 +109,9 @@ export async function generateAllStats() {
 
 export async function deleteUser(userId: number) {
     try {
+        const session = await verifyAdminSession();
+        if (!session) throw new Error("Unauthorized");
+
         // Delete related data first
         await db.watchHistory.deleteMany({ where: { userId } });
         await db.syncLog.deleteMany({ where: { userId } });
@@ -112,6 +127,9 @@ export async function deleteUser(userId: number) {
 
 export async function purgeAllData() {
     try {
+        const session = await verifyAdminSession();
+        if (!session) throw new Error("Unauthorized");
+
         // Nuke everything
         await db.watchHistory.deleteMany({});
         await db.syncLog.deleteMany({});
@@ -135,14 +153,36 @@ export async function getSystemStatus() {
     try {
         const adminCount = await db.adminUser.count();
         const config = await db.tautulliConfig.findFirst();
+
+        const initialized = adminCount > 0 && !!config;
+        const hasAdmin = adminCount > 0;
+
+        // If not authenticated, DO NOT return sensitive config
+        const session = await verifyAdminSession();
+        if (!session) {
+            return {
+                initialized,
+                hasAdmin,
+                config: null,
+                aiConfig: null,
+                mediaConfig: null
+            };
+        }
+
+        // If authenticated, mask secrets
         const aiConfig = await db.aiConfig.findFirst();
+        const mediaConfig = await db.mediaConfig.findFirst();
 
         return {
-            initialized: adminCount > 0 && !!config,
-            hasAdmin: adminCount > 0,
-            config: config,
-            aiConfig: aiConfig,
-            mediaConfig: await db.mediaConfig.findFirst()
+            initialized,
+            hasAdmin,
+            config: config ? { ...config, apiKey: MASK } : null,
+            aiConfig: aiConfig ? { ...aiConfig, apiKey: aiConfig.apiKey ? MASK : null } : null,
+            mediaConfig: mediaConfig ? {
+                ...mediaConfig,
+                tmdbApiKey: mediaConfig.tmdbApiKey ? MASK : null,
+                tvdbApiKey: mediaConfig.tvdbApiKey ? MASK : null
+            } : null
         };
     } catch (error) {
         return { initialized: false, hasAdmin: false, config: null, aiConfig: null, mediaConfig: null };
@@ -151,31 +191,42 @@ export async function getSystemStatus() {
 
 export async function saveSystemConfig(data: any) {
     try {
+        // Special case: Allow if no admin users exist (Setup flow)
+        const adminCount = await db.adminUser.count();
+        if (adminCount > 0) {
+            const session = await verifyAdminSession();
+            if (!session) throw new Error("Unauthorized");
+        }
+
         // 1. Tautulli Config
+        const existing = await db.tautulliConfig.findFirst();
+
         const configData = {
             ip: data.ip,
             port: parseInt(data.port),
-            apiKey: data.apiKey,
+            apiKey: data.apiKey === MASK && existing ? existing.apiKey : data.apiKey,
             useSsl: data.useSsl === 'on' || data.useSsl === true,
             rootPath: data.rootPath || ''
         };
 
-        const existing = await db.tautulliConfig.findFirst();
         if (existing) {
             await db.tautulliConfig.update({ where: { id: existing.id }, data: configData });
         } else {
+            // If creating new but sending mask, that's invalid, but UI shouldn't allow it.
+            if (configData.apiKey === MASK) throw new Error("Invalid API Key");
             await db.tautulliConfig.create({ data: configData });
         }
 
         // 2. AI Config
+        const existingAi = await db.aiConfig.findFirst();
+
         const aiData = {
             enabled: data.aiEnabled === 'on' || data.aiEnabled === true,
-            apiKey: data.aiKey || null,
+            apiKey: (data.aiKey === MASK && existingAi) ? existingAi.apiKey : (data.aiKey || null),
             instructions: data.aiInstructions || null,
             // default model for now
         };
 
-        const existingAi = await db.aiConfig.findFirst();
         if (existingAi) {
             await db.aiConfig.update({ where: { id: existingAi.id }, data: aiData });
         } else {
@@ -183,12 +234,13 @@ export async function saveSystemConfig(data: any) {
         }
 
         // 3. Media Config
+        const existingMedia = await db.mediaConfig.findFirst();
+
         const mediaData = {
-            tmdbApiKey: data.tmdbApiKey || null,
-            tvdbApiKey: data.tvdbApiKey || null,
+            tmdbApiKey: (data.tmdbApiKey === MASK && existingMedia) ? existingMedia.tmdbApiKey : (data.tmdbApiKey || null),
+            tvdbApiKey: (data.tvdbApiKey === MASK && existingMedia) ? existingMedia.tvdbApiKey : (data.tvdbApiKey || null),
         };
 
-        const existingMedia = await db.mediaConfig.findFirst();
         if (existingMedia) {
             await db.mediaConfig.update({ where: { id: existingMedia.id }, data: mediaData });
         } else {
@@ -236,6 +288,9 @@ export async function saveSystemConfig(data: any) {
 
 export async function syncTautulliUsers() {
     try {
+        const session = await verifyAdminSession();
+        if (!session) throw new Error("Unauthorized");
+
         const count = await syncUsers();
         revalidatePath('/admin');
         return { success: true, count };
@@ -247,6 +302,9 @@ export async function syncTautulliUsers() {
 
 export async function syncAllUsersHistory() {
     try {
+        const session = await verifyAdminSession();
+        if (!session) throw new Error("Unauthorized");
+
         const users = await db.user.findMany({
             where: { isActive: true }
         });
