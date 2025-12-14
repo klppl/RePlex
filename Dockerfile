@@ -5,8 +5,7 @@ WORKDIR /app
 
 # Install dependencies based on the preferred package manager
 COPY package.json package-lock.json ./
-RUN npm ci
-
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 # Rebuild the source code only when needed
 FROM node:20-alpine AS builder
@@ -14,14 +13,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Next.js collects completely anonymous telemetry data about general usage.
-# Learn more here: https://nextjs.org/telemetry
-# Uncomment the following line in case you want to disable telemetry during the build.
-# ENV NEXT_TELEMETRY_DISABLED 1
-
 # Generate Prisma Client for the correct target
 RUN npx prisma generate
-
 RUN npm run build
 
 # Production image, copy all the files and run next
@@ -38,10 +31,12 @@ RUN adduser --system --uid 1001 nextjs
 # Install openssl and su-exec
 RUN apk add --no-cache openssl su-exec
 
-# Install prisma CLI
-RUN mkdir -p /app/prisma-cli
-COPY package.json /app/prisma-cli/package.json
-RUN cd /app/prisma-cli && npm install prisma
+# Install prisma CLI (pinned version for cache stability)
+# We don't copy package.json here to avoid cache invalidation when deps change
+RUN mkdir -p /app/prisma-cli && \
+    cd /app/prisma-cli && \
+    npm init -y && \
+    npm install prisma@5.22.0
 
 COPY --from=builder /app/public ./public
 
