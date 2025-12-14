@@ -355,7 +355,7 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                 <section className="text-center space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000">
                     <div>
                         <h1 className="text-5xl md:text-7xl font-black mb-2 tracking-tight">
-                            Your {year} <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Wrapped</span>
+                            Your {year} <span className="text-[#e5a00d]">Plex</span> <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Wrapped</span>
                         </h1>
                         <p className="text-xl text-slate-400">You spent a lot of time watching screens.</p>
                     </div>
@@ -401,8 +401,36 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                                     <span>TV Shows</span>
                                 </div>
                             </div>
+
+                            <div className="mt-8 pt-8 border-t border-white/5">
+                                <p className="text-xl text-slate-400">
+                                    That's equivalent to working a <span className="text-emerald-400 font-bold">full-time job</span> for <span className="text-white font-bold">{((stats.totalSeconds / 3600) / 160).toFixed(1)} months</span>.
+                                    <br /><span className="text-sm opacity-60 italic">(Hope the pay was good)</span>
+                                </p>
+                            </div>
                         </div>
                     </div>
+
+                    {/* 7. VALUE PROPOSITION */}
+                    {stats.valueProposition && (
+                        <div className="bg-slate-900 p-12 rounded-3xl border border-slate-800 hover:border-emerald-500/50 transition group relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition transform group-hover:scale-110 duration-700">
+                                <span className="text-9xl">💰</span>
+                            </div>
+
+                            <h3 className="text-emerald-400 uppercase tracking-widest text-sm font-bold mb-4">Value Proposition</h3>
+
+                            <div className="relative z-10">
+                                <div className="text-6xl md:text-8xl font-black text-white mb-4 tracking-tighter">
+                                    ${stats.valueProposition.toLocaleString()}
+                                </div>
+                                <p className="text-xl text-slate-400 max-w-2xl">
+                                    That's how much this content would have cost you <span className="text-emerald-400 font-bold">at market value</span>.
+                                    <br /><span className="text-sm opacity-60">(Based on $12.00/movie and $15.49/mo for TV currently)</span>
+                                </p>
+                            </div>
+                        </div>
+                    )}
                 </section>
 
                 {/* PERSONALITY & DEEP DIVE (Consolidated DNA) */}
@@ -712,12 +740,16 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                     {/* 6. TECH STATS (Redesigned) */}
                     <div className="flex flex-col gap-8">
                         {/* Streamed */}
+                        {/* Streamed -> The Retro Nightmare */}
                         <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex items-center gap-6 hover:border-emerald-500/50 transition">
-                            <div className="text-4xl text-emerald-400 bg-emerald-900/10 p-4 rounded-full flex-shrink-0">📡</div>
+                            <div className="text-4xl text-emerald-400 bg-emerald-900/10 p-4 rounded-full flex-shrink-0">📠</div>
                             <div>
-                                <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-1">Streamed</h3>
+                                <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-1">The Retro Nightmare</h3>
                                 <div className="text-2xl font-bold text-white leading-tight mb-1">{stats.techStats.totalDataGB} GB</div>
-                                <p className="text-xs text-slate-600 italic">"Sorry, ISP limits"</p>
+                                <p className="text-xs text-slate-400">
+                                    On a 56k modem, this download would finish in <span className="text-emerald-400 font-bold">{year + Math.round((stats.techStats.totalDataGB * 1024 * 1024 * 1024 * 8) / 56000 / 31536000)}</span>.
+                                    <br /><span className="italic opacity-50">(Hope no one picks up the phone)</span>
+                                </p>
                             </div>
                         </div>
 
@@ -754,6 +786,8 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
 
 
                 </section>
+
+
 
                 {/* TOP REPLAYED MOVIES (List) */}
                 <section className="space-y-8">

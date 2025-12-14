@@ -32,6 +32,7 @@ export interface StatsResult {
     };
     commitmentIssues: { count: number; titles: string[] };
     aiSummary?: string;
+    valueProposition?: number;
 }
 
 export async function getStats(userId: number, year?: number, from?: Date, to?: Date, options: { forceRefresh?: boolean } = {}): Promise<StatsResult> {
@@ -421,6 +422,28 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         }
     }
 
+    // 8. Value Proposition
+    // Formula: (Movies * $12) + ((TV_Hours / 10) * $15.49)
+    // 10 hours of TV ~ 1 month of streaming value?
+    // Cost per movie: ~$12 (Blu-ray/Digital Purchase)
+    // Cost per TV month: ~$15.49 (Standard Netflix)
+    // assumption: Avg TV season is 10 hours.
+
+    // Count exact number of movies watched (regardless of finish state, or maybe just > 0 duration?)
+    // Using topMoviesRaw counts only >1 plays. We need total movie count.
+    const uniqueMoviesCount = await db.watchHistory.groupBy({ // This is just counting rows really if grouped by ID, duplicate plays?
+        by: ['ratingKey'],
+        where: { ...where, mediaType: 'movie' }
+    });
+    // Distinct movies played
+    const movieCount = uniqueMoviesCount.length;
+
+    const tvHours = showSeconds / 3600;
+
+    const movieValue = movieCount * 12.00;
+    const tvValue = (tvHours / 10.0) * 15.49;
+    const totalValue = Math.round(movieValue + tvValue);
+
     const result: StatsResult = {
         totalDuration, totalSeconds, topMovies, topShows, lazyDay, activityType,
         oldestMovie: oldestMovieRaw ? { title: oldestMovieRaw.title, year: oldestMovieRaw.year! } : undefined,
@@ -432,7 +455,8 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         bingeRecord,
         techStats: { totalDataGB, transcodePercent, topPlatforms },
         commitmentIssues: { count: uncommittedCount, titles: uncommittedTitles },
-        aiSummary // Add to result
+        aiSummary,
+        valueProposition: totalValue // Added field
     };
 
     // Cache the result
