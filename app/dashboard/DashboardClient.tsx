@@ -899,50 +899,7 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                     {/* 6. TECH STATS (Redesigned) */}
                     <div className="flex flex-col gap-8">
                         {/* The ISP Enemy (Replaces The Retro Nightmare) */}
-                        <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex items-center gap-6 hover:border-orange-500/50 transition cursor-help group relative">
-                            <div className="text-4xl text-orange-400 bg-orange-900/10 p-4 rounded-full flex-shrink-0">✂️</div>
-                            <div className="flex-1">
-                                {(() => {
-                                    const gb = (stats.totalBandwidth || 0) / (1024 * 1024 * 1024);
-                                    const tb = gb / 1024;
-                                    let displayVal = `${Math.round(gb).toLocaleString()} GB`;
-                                    if (tb >= 10) displayVal = `${tb.toFixed(1)} TB`;
-                                    else if (tb >= 1) displayVal = `${tb.toFixed(2)} TB`;
-
-                                    let title = "The Ghost";
-                                    let text = "Your ISP thinks this house is vacant. You barely scratched the copper cables.";
-
-                                    if (gb >= 50000) {
-                                        title = "The Backbone Provider";
-                                        text = "Congratulations, you are now legally considered a data center. The neighborhood dimming lights? That’s you downloading a 4K remux.";
-                                    } else if (gb >= 10000) {
-                                        title = "The Throttled One";
-                                        text = "You are the reason 'Unlimited Data' now has an asterisk (*). Support definitely put a 'Do Not Answer' note on your file.";
-                                    } else if (gb >= 2000) {
-                                        title = "The Profit Killer";
-                                        text = "You pulled terabytes down the pipe. Your ISP has likely pinned a picture of your router on their office dartboard.";
-                                    } else if (gb >= 500) {
-                                        title = "The Average Joe";
-                                        text = "You’re flying under the radar. Your ISP loves you: you pay full price but barely use the pipes.";
-                                    }
-
-                                    return (
-                                        <>
-                                            <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-1">Bandwidth Consumed</h3>
-                                            <p className="text-lg font-bold text-white leading-tight">
-                                                You pulled <span className="text-orange-400">{displayVal}</span> down the pipe.
-                                                <span className="block text-slate-400 text-sm font-normal mt-2 opacity-80">{text}</span>
-                                            </p>
-
-                                            {/* Tooltip diagnosis */}
-                                            <div className="absolute top-0 right-0 mt-4 mr-4 bg-orange-500/10 px-3 py-1 rounded-full border border-orange-500/20 hidden md:block">
-                                                <span className="text-xs font-bold text-orange-400 uppercase tracking-widest">{title}</span>
-                                            </div>
-                                        </>
-                                    );
-                                })()}
-                            </div>
-                        </div>
+                        {/* The ISP Enemy (Removed duplicate) */}
 
                         {/* Transcoded -> The Toast Index */}
                         <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex items-center gap-6 hover:border-orange-500/50 transition">
