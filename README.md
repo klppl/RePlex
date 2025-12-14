@@ -43,3 +43,14 @@ If you can't fix it, at least post an Issue with details. We appreciate contribu
 <a href="screenshot.png">
   <img src="screenshot.png" style="width: 100%; max-width: 800px; border-radius: 10px; border: 1px solid #333;" alt="RePlex Dashboard Preview">
 </a>
+
+## Future Roadmap / TODO
+
+The project is functional but has plenty of room to grow. Here is what is on the radar:
+
+- [ ] **Compare with other users (in the works)**: See how your stats stack up against the server average or specific friends.
+- [ ] **Year Selection**: Currently defaults to the current year. Add ability to generate reports for previous years.
+- [ ] **Background Jobs**: "Sync All Data" can be slow for large servers. Move this to a background queue (e.g., BullMQ) to avoid timeouts.
+- [ ] **Public/Private Toggle**: Secure user dashboards with unique tokens or magic links instead of simple IDs to prevent enumeration.
+- [ ] **Localization**: Support matching the dashboard language to the user's Plex/Tautulli language settings.
+- [ ] **Testing**: Add unit and integration tests to ensure stability during refactors.
