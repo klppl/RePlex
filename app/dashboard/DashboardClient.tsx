@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { StatCard } from '../components/StatCard';
-import { StatsResult } from '@/lib/services/stats';
+import { ComparisonChart } from '../components/ComparisonChart';
 import { Router } from 'lucide-react';
+import { StatsResult } from '@/lib/services/stats';
 
 interface DashboardClientProps {
     initialStats: StatsResult;
@@ -485,6 +486,14 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                             })()}
                         </div>
                     </div>
+
+                    {/* 9. COMPARISON CHART (New) */}
+                    {stats.comparison && (
+                        <div className="mt-8">
+                            <ComparisonChart comparison={stats.comparison} />
+                        </div>
+                    )}
+
                 </section>
 
                 {/* PERSONALITY & DEEP DIVE (Consolidated DNA) */}

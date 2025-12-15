@@ -121,15 +121,14 @@ export async function syncUsers(): Promise<number> {
 
 export async function fetchHistory(
     config: TautulliConfig,
-    userId: number,
+    userId: number | null,
     date: Date,
     length: number = 2000
 ): Promise<TautulliHistoryEntry[]> {
     // Using ASC order to iteration logic
     const startDateStr = format(date, 'yyyy-MM-dd');
 
-    const params = {
-        user_id: userId.toString(),
+    const params: Record<string, string> = {
         cmd: 'get_history',
         grouping: '1',
         include_activity: '0',
@@ -138,6 +137,10 @@ export async function fetchHistory(
         order_column: 'date',
         order_dir: 'asc'
     };
+
+    if (userId !== null) {
+        params.user_id = userId.toString();
+    }
 
     const url = getTautulliUrl(config, 'get_history', params);
     const res = await fetch(url);

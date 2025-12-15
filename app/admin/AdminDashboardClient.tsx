@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { AdminUserType, purgeAllData, syncTautulliUsers, syncAllUsersHistory, saveSystemConfig, deleteUser, generateUserStats, generateAllStats, generateLoginLink } from "@/lib/actions/admin";
+import { AdminUserType, purgeAllData, syncTautulliUsers, syncAllUsersHistory, saveSystemConfig, deleteUserReport, generateUserStats, generateAllStats, generateLoginLink } from "@/lib/actions/admin";
 import { formatDistanceToNow } from 'date-fns';
 
 type AdminView = 'users' | 'settings' | 'setup' | 'login';
@@ -69,14 +69,15 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
         setIsSyncing(false);
     };
 
-    const handleDeleteUser = async (id: number) => {
-        if (!confirm("Are you sure you want to delete this user and all their data?")) return;
+    const handleDeleteReport = async (id: number) => {
+        if (!confirm("Are you sure you want to delete the generated report? The user and their history will remain.")) return;
         setDeletingId(id);
-        const res = await deleteUser(id);
+        const res = await deleteUserReport(id);
         if (res.success) {
-            setUsers(users.filter(u => u.id !== id));
+            // Update local state to remove the generated flag
+            setUsers(users.map(u => u.id === id ? { ...u, statsGeneratedAt: null } : u));
         } else {
-            alert("Failed to delete user");
+            alert("Failed to delete report");
         }
         setDeletingId(null);
     };
@@ -96,14 +97,42 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
         if (!confirm("WARNING: generating profiles for ALL users can be very resource intensive and slow for big servers. Are you sure?")) return;
 
         setIsGeneratingAll(true);
-        const res = await generateAllStats();
-        setIsGeneratingAll(false);
+        // Switch to terminal view if hidden or other view? 
+        // We'll just ensure terminal is visible
+        if (!isTerminalContentVisible) setIsTerminalContentVisible(true);
 
-        if (res.success) {
+        setTerminalLogs(['Initializing generation...']);
+        setIsStreaming(true); // Reuse streaming state for terminal styling
+
+        try {
+            const response = await fetch('/api/admin/generate');
+            const reader = response.body?.getReader();
+            if (!reader) throw new Error('Failed to start stream');
+
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n').filter(Boolean);
+
+                setTerminalLogs(prev => {
+                    const newLogs = [...prev, ...lines];
+                    return newLogs.slice(-1000);
+                });
+            }
+
             alert("Generation Complete!");
             router.refresh();
-        } else {
-            alert("Generation failed: " + res.error);
+        } catch (error) {
+            console.error(error);
+            setTerminalLogs(prev => [...prev, `[ERROR] Connection failed: ${error}`]);
+            alert("Generation failed");
+        } finally {
+            setIsGeneratingAll(false);
+            setIsStreaming(false);
         }
     };
 
@@ -151,8 +180,8 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
         const res = await generateLoginLink(id);
         if (res.success && res.token) {
             const url = `${window.location.origin}/login?token=${res.token}`;
-            // Use a nice prompt or modal, but prompt is easy for copy
-            prompt("Copy this secure login link and send it to the user:", url);
+            await navigator.clipboard.writeText(url);
+            alert("Login link generated and copied to clipboard!");
         } else {
             alert("Failed to generate link: " + res.error);
         }
@@ -160,22 +189,53 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
 
 
 
-    const [syncingAll, setSyncingAll] = useState(false);
+
+    // Terminal / Streaming State
+    const [isStreaming, setIsStreaming] = useState(false);
+    const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
+    const [isTerminalContentVisible, setIsTerminalContentVisible] = useState(true);
+    const terminalRef = useRef<HTMLDivElement>(null);
+
+    // Auto-scroll terminal
+    useEffect(() => {
+        if (terminalRef.current) {
+            terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+        }
+    }, [terminalLogs]);
+
+
     const handleSyncAll = async () => {
-        setSyncingAll(true);
+        setIsStreaming(true);
+        setTerminalLogs(['Initializing global sync...']);
+
         try {
-            const res = await syncAllUsersHistory();
-            if (res.success) {
-                alert(res.summary);
-                setUsers(users.map(u => ({ ...u }))); // Force re-render if needed
-                window.location.reload();
-            } else {
-                alert(`Sync failed: ${res.error}`);
+            const response = await fetch('/api/admin/sync');
+            const reader = response.body?.getReader();
+            if (!reader) throw new Error('Failed to start stream');
+
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n').filter(Boolean);
+
+                setTerminalLogs(prev => {
+                    // Keep last 1000 lines
+                    const newLogs = [...prev, ...lines];
+                    return newLogs.slice(-1000);
+                });
             }
-        } catch (e) {
-            alert("Sync failed unexpectedly.");
+
+            // Refresh logic if needed, or just let users reload manually
+            // window.location.reload(); 
+        } catch (error) {
+            console.error(error);
+            setTerminalLogs(prev => [...prev, `[ERROR] Connection failed: ${error}`]);
         } finally {
-            setSyncingAll(false);
+            setIsStreaming(false);
         }
     };
 
@@ -224,8 +284,18 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                         onClick={handleSync}
                         disabled={isSyncing || isGeneratingAll}
                         className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${isSyncing ? 'bg-indigo-600/50 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
+                        title="Fetch user list from Tautulli"
                     >
-                        {isSyncing ? 'Syncing...' : '🔄 Sync Users'}
+                        {isSyncing ? 'Syncing List...' : '🔄 Sync List'}
+                    </button>
+
+                    <button
+                        onClick={handleSyncAll}
+                        disabled={isStreaming}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${isStreaming ? 'bg-blue-600/50 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+                        title="Download history for all users"
+                    >
+                        {isStreaming ? 'Downloading...' : '⬇️ Download All Data'}
                     </button>
 
                     {view === 'users' && users.length > 0 && (
@@ -237,10 +307,10 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                             {isGeneratingAll ? (
                                 <>
                                     <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    Crunching Data...
+                                    Generating...
                                 </>
                             ) : (
-                                <>⚡ Generate ALL</>
+                                <>⚡ Generate Downloaded</>
                             )}
                         </button>
                     )}
@@ -248,7 +318,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                         onClick={() => router.push('/')}
                         className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm font-medium transition"
                     >
-                        Back to Home
+                        Home
                     </button>
                     <button
                         onClick={handleLogout}
@@ -258,6 +328,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                     </button>
                 </div>
             )}
+
         </div>
     );
 
@@ -301,7 +372,10 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                                 ) : (
                                     <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center text-2xl">👤</div>
                                 )}
-                                <div className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-slate-900 ${user.historyCount > 0 ? 'bg-emerald-500' : 'bg-slate-500'}`} title={user.historyCount > 0 ? "Data Synced" : "No Data"} />
+                                <div className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-slate-900 ${user.statsGeneratedAt ? 'bg-emerald-500' :
+                                    user.historyCount > 0 ? 'bg-yellow-500' :
+                                        'bg-red-500'
+                                    }`} title={user.statsGeneratedAt ? "Report Generated" : user.historyCount > 0 ? "Data Downloaded" : "No Data"} />
                             </div>
 
                             <div className="flex-1 text-center md:text-left">
@@ -314,12 +388,20 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                                         </span>
                                     ) : user.statsGeneratedAt ? (
                                         <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] uppercase font-bold tracking-wider border border-emerald-500/30">
-                                            Cached
+                                            Report Generated
                                         </span>
-                                    ) : null}
+                                    ) : user.historyCount > 0 ? (
+                                        <span className="px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 text-[10px] uppercase font-bold tracking-wider border border-yellow-500/30">
+                                            Data Downloaded
+                                        </span>
+                                    ) : (
+                                        <span className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[10px] uppercase font-bold tracking-wider border border-red-500/30">
+                                            No Data
+                                        </span>
+                                    )}
                                 </h3>
                                 <p className="text-slate-400 text-sm">{user.email || 'No email'}</p>
-                                <div className="mt-2 text-xs font-mono text-slate-500 bg-black/30 inline-block px-2 py-1 rounded">
+                                <div className="mt-2 text-xs font-mono text-slate-500 bg-black/30 inline-block px-2 py-1 rounded" suppressHydrationWarning>
                                     ID: {user.id} • History: {user.historyCount.toLocaleString()}
                                     {user.statsGeneratedAt && ` • Gen: ${formatDistanceToNow(new Date(user.statsGeneratedAt), { addSuffix: true })}`}
                                 </div>
@@ -354,11 +436,11 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                                     🔗
                                 </button>
                                 <button
-                                    onClick={() => handleDeleteUser(user.id)}
-                                    disabled={deletingId === user.id}
-                                    className="flex-1 md:flex-none px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/50 rounded-lg text-sm font-bold transition disabled:opacity-50"
+                                    onClick={() => handleDeleteReport(user.id)}
+                                    disabled={!user.statsGeneratedAt || deletingId === user.id}
+                                    className="flex-1 md:flex-none px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/50 rounded-lg text-sm font-bold transition disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {deletingId === user.id ? '...' : 'Delete'}
+                                    {deletingId === user.id ? '...' : (user.statsGeneratedAt ? 'Del Rep' : 'No Rep')}
                                 </button>
                             </div>
                         </div>
@@ -412,7 +494,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                     )}
                 </div>
             </div>
-        </div>
+        </div >
     );
 
     const renderSettings = () => (
@@ -512,10 +594,10 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                             <button
                                 type="button"
                                 onClick={handleSyncAll}
-                                disabled={syncingAll}
+                                disabled={isStreaming}
                                 className="px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition disabled:opacity-50 flex-shrink-0"
                             >
-                                {syncingAll ? 'Syncing...' : 'Sync All Data'}
+                                {isStreaming ? 'Syncing...' : 'Sync All Data'}
                             </button>
                         </div>
                     </div>
@@ -566,10 +648,54 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
         </div>
     );
 
+    const renderTerminal = () => (
+        <div className="bg-black rounded-lg border border-gray-800 overflow-hidden font-mono text-xs md:text-sm shadow-2xl transition-all duration-300">
+            <div
+                className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800 cursor-pointer hover:bg-gray-800 transition-colors"
+                onClick={() => setIsTerminalContentVisible(!isTerminalContentVisible)}
+            >
+                <span className="text-gray-400 flex items-center gap-2 font-bold tracking-widest uppercase">
+                    <span className={`w-2 h-2 rounded-full ${isStreaming ? 'bg-green-500 animate-pulse' : 'bg-red-900'}`}></span>
+                    SYSTEM_ENTROPY
+                </span>
+                <div className="flex items-center gap-4">
+                    <span className="text-[10px] text-gray-600 uppercase tracking-widest">{isTerminalContentVisible ? 'COLLAPSE' : 'EXPAND'}</span>
+                </div>
+            </div>
+
+            {isTerminalContentVisible && (
+                <div
+                    ref={terminalRef}
+                    className="h-64 overflow-y-auto p-4 space-y-1 scroll-smooth bg-black/95 text-green-500 font-mono"
+                >
+                    {terminalLogs.length === 0 && !isStreaming && (
+                        <div className="text-gray-800 italic select-none text-center mt-20 opacity-50">
+                            // WAITING_FOR_INPUT...
+                        </div>
+                    )}
+                    {terminalLogs.map((log, i) => (
+                        <div key={i} className={`${log.includes('[ERROR]') ? 'text-red-500 font-bold' :
+                            log.includes('[SYNC]') ? 'text-cyan-400' :
+                                log.includes('[ADMIN]') ? 'text-yellow-500' :
+                                    'text-gray-400'
+                            }`}>
+                            <span className="text-gray-700 mr-3 select-none text-[10px] uppercase tracking-tighter">[{new Date().toLocaleTimeString()}]</span>
+                            {log}
+                        </div>
+                    ))}
+                    {isStreaming && (
+                        <div className="text-green-500 animate-pulse">_</div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+
     return (
         <div className="min-h-screen bg-slate-950 text-white p-8">
             <div className="max-w-6xl mx-auto space-y-8">
                 {renderHeader()}
+                {view !== 'login' && view !== 'setup' && renderTerminal()}
                 {renderNav()}
 
                 {view === 'users' && renderUsers()}

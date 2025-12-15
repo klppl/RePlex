@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { hashPassword, verifyAdminSession } from '../auth-admin';
 import { getStats } from '../services/stats';
 import { syncUsers } from '../services/tautulli';
-import { syncHistoryForUser } from '../services/sync';
+import { syncHistoryForUser, syncGlobalHistory } from '../services/sync';
 import { SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 
@@ -72,8 +72,20 @@ export async function generateUserStats(userId: number) {
         const from = new Date(year, 0, 1);
         const to = new Date(); // Now
 
-        console.log(`[ADMIN] Syncing history for user ${userId} (${year})...`);
-        await syncHistoryForUser(userId, from, to, true); // Force sync
+        // OPTIMIZATION: Check if we already have data for this user this year
+        const hasHistory = await db.watchHistory.findFirst({
+            where: {
+                userId,
+                date: { gte: from }
+            }
+        });
+
+        if (hasHistory) {
+            console.log(`[ADMIN] Data exists for user ${userId} (${year}). Skipping download, generating stats directly.`);
+        } else {
+            console.log(`[ADMIN] No data found for user ${userId} (${year}). Syncing history...`);
+            await syncHistoryForUser(userId, from, to, true); // Force sync
+        }
 
         // 2. Generate stats (this will update the cache in db.user)
         console.log(`[ADMIN] Generating stats for user ${userId}...`);
@@ -126,6 +138,27 @@ export async function deleteUser(userId: number) {
     } catch (error) {
         console.error("Failed to delete user:", error);
         return { success: false, error: "Failed to delete user" };
+    }
+}
+
+export async function deleteUserReport(userId: number) {
+    try {
+        const session = await verifyAdminSession();
+        if (!session) throw new Error("Unauthorized");
+
+        await db.user.update({
+            where: { id: userId },
+            data: {
+                statsCache: null,
+                statsGeneratedAt: null
+            }
+        });
+
+        revalidatePath('/admin');
+        return { success: true };
+    } catch (error) {
+        console.error("Failed to delete user report:", error);
+        return { success: false, error: "Failed to delete report" };
     }
 }
 
@@ -337,37 +370,21 @@ export async function syncAllUsersHistory() {
         const session = await verifyAdminSession();
         if (!session) throw new Error("Unauthorized");
 
-        const users = await db.user.findMany({
-            where: { isActive: true }
-        });
-
         // Current Year Logic
         const now = new Date();
         const startOfYear = new Date(now.getFullYear(), 0, 1); // Jan 1st
         const endOfYear = new Date(now.getFullYear(), 11, 31); // Dec 31st
 
-        console.log(`[ADMIN] Starting global sync for ${users.length} users...`);
+        console.log(`[ADMIN] Starting global sync from ${startOfYear.toDateString()} to ${endOfYear.toDateString()}...`);
 
-        let successCount = 0;
-        let failCount = 0;
-        let totalEntries = 0;
-
-        for (const user of users) {
-            try {
-                console.log(`[ADMIN] Syncing history for ${user.username}...`);
-                const res = await syncHistoryForUser(user.id, startOfYear, endOfYear);
-                totalEntries += res.totalEntries;
-                successCount++;
-            } catch (e: any) {
-                console.error(`[ADMIN] Failed to sync ${user.username}:`, e.message);
-                failCount++;
-            }
-        }
+        const res = await syncGlobalHistory(startOfYear, endOfYear, (msg) => {
+            console.log(`[SYNC] ${msg}`);
+        });
 
         return {
             success: true,
-            summary: `Synced ${successCount} users (${totalEntries} entries). Failed: ${failCount}`,
-            details: { successCount, failCount, totalEntries }
+            summary: `Global Sync Complete. Processed ${res.syncedDays} days and ${res.totalEntries} entries.`,
+            details: res
         };
 
     } catch (error: any) {

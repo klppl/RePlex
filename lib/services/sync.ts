@@ -235,3 +235,202 @@ export async function syncHistoryForUser(
 
     return { syncedDays, totalEntries };
 }
+
+export async function syncGlobalHistory(
+    fromDate: Date,
+    toDate: Date,
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal
+): Promise<{ syncedDays: number, totalEntries: number }> {
+    const config = await db.tautulliConfig.findFirst();
+    if (!config) {
+        throw new Error('Tautulli configuration missing');
+    }
+
+    const start = startOfDay(fromDate);
+    const end = startOfDay(toDate);
+
+    let syncedDays = 0;
+    let totalEntries = 0;
+    let lastLoggedMonth = '';
+
+    // Calculate total duration for progress
+    const totalDays = differenceInCalendarDays(end, start) + 1;
+    let daysProcessed = 0;
+    let lastProgress = 0;
+    const startTime = Date.now();
+
+    // Fetch Active Users map
+    const activeUsers = await db.user.findMany({ where: { isActive: true }, select: { id: true } });
+    const activeUserSet = new Set(activeUsers.map(u => u.id));
+
+    // Generate Date List
+    const allDates: Date[] = [];
+    let dt = start;
+    while (dt <= end) {
+        allDates.push(new Date(dt)); // Clone
+        dt = addDays(dt, 1);
+    }
+
+    const startStr = format(start, 'yyyy-MM-dd');
+    const endStr = format(end, 'yyyy-MM-dd');
+    if (onProgress) onProgress(`INFO: Starting global sync from ${startStr} to ${endStr}`);
+
+    // Process in Batches
+    const CONCURRENCY = 10; // Lowered back to 10 to prevent SQLite timeouts
+
+    for (let i = 0; i < allDates.length; i += CONCURRENCY) {
+        if (signal?.aborted) throw new Error('Sync aborted');
+
+        const batch = allDates.slice(i, i + CONCURRENCY);
+
+        // Process Batch
+        const results = await Promise.all(batch.map(async (currentDate) => {
+            let entriesCount = 0;
+            let success = false;
+
+            try {
+                // Determine Month for Logging (using first in batch or current)
+                // We'll update main progress loop after batch.
+
+                // Fetch Global History for Day
+                const history = await fetchHistory(config as any, null, currentDate); // null user_id = global
+
+                // Filter for Active Users
+                const validItems = [];
+                const uniqueItemsToFetch = new Set<string>();
+                const metadataCache: Record<string, any> = {};
+
+                for (const h of history) {
+                    const hDate = new Date(h.date * 1000);
+                    if (isSameDay(hDate, currentDate)) {
+                        if (activeUserSet.has(h.user_id)) {
+                            validItems.push(h);
+                            if (h.rating_key) uniqueItemsToFetch.add(h.rating_key.toString());
+                        }
+                    }
+                }
+
+                // Fetch metadata for unique items
+                const uniqueKeys = Array.from(uniqueItemsToFetch);
+                const META_BATCH = 25; // Keep high for network speed
+
+                for (let j = 0; j < uniqueKeys.length; j += META_BATCH) {
+                    const mb = uniqueKeys.slice(j, j + META_BATCH);
+                    await Promise.all(mb.map(async (key) => {
+                        try {
+                            const meta = await fetchMetadata(config, key);
+                            if (meta) metadataCache[key] = meta;
+                        } catch (err) { }
+                    }));
+                }
+
+                // Transaction: Delete & Insert
+                if (validItems.length > 0) {
+                    await db.watchHistory.deleteMany({
+                        where: {
+                            userId: { in: Array.from(activeUserSet) },
+                            date: {
+                                gte: startOfDay(currentDate),
+                                lte: endOfDay(currentDate)
+                            }
+                        }
+                    });
+
+                    await db.watchHistory.createMany({
+                        data: validItems.map(h => {
+                            const meta = h.rating_key ? metadataCache[h.rating_key.toString()] : null;
+                            const actors = meta?.actors ? meta.actors.join(',') : null;
+                            const genres = meta?.genres ? meta.genres.map((g: any) => typeof g === 'string' ? g : g.tag).join(',') : null;
+
+                            let fileSize = null;
+                            if (meta?.media_info?.[0]?.parts?.[0]) {
+                                fileSize = BigInt(meta.media_info[0].parts[0].file_size);
+                            }
+
+                            return {
+                                userId: h.user_id,
+                                tautulliId: h.row_id || h.id,
+                                date: new Date(h.date * 1000),
+                                duration: h.duration ? parseInt(String(h.duration), 10) : 0,
+                                percentComplete: h.percent_complete ? parseInt(String(h.percent_complete), 10) : 0,
+                                mediaType: h.media_type,
+                                year: h.year ? parseInt(String(h.year), 10) : null,
+                                title: h.title,
+                                parentTitle: h.parent_title,
+                                grandparentTitle: h.grandparent_title,
+                                ratingKey: h.rating_key?.toString(),
+                                parentRatingKey: h.parent_rating_key?.toString(),
+                                grandparentRatingKey: h.grandparent_rating_key?.toString(),
+                                fullTitle: h.full_title,
+                                actors: actors,
+                                genres: genres,
+                                rating: meta?.rating ? Number(meta.rating) : (meta?.audience_rating ? Number(meta.audience_rating) : null),
+                                transcodeDecision: h.transcode_decision,
+                                player: h.player,
+                                fileSize: fileSize,
+                            };
+                        })
+                    });
+                    entriesCount = validItems.length;
+                }
+
+                // Update SyncLog - Optimized for SQLite (Bulk delete + insert instead of N upserts)
+                const isCurrentDateToday = isSameDay(currentDate, new Date());
+                if (!isCurrentDateToday) {
+                    // Use a transaction to ensure atomicity for the log update
+                    await db.$transaction([
+                        db.syncLog.deleteMany({
+                            where: {
+                                userId: { in: activeUsers.map(u => u.id) },
+                                date: currentDate
+                            }
+                        }),
+                        db.syncLog.createMany({
+                            data: activeUsers.map(u => ({
+                                userId: u.id,
+                                date: currentDate,
+                                completed: true
+                            }))
+                        })
+                    ]);
+                }
+
+                success = true;
+            } catch (e) {
+                console.error(`Failed to global sync date ${currentDate.toISOString()}`, e);
+            }
+            return { success, entriesCount };
+        }));
+
+        // Update Totals & Progress
+        results.forEach(r => {
+            if (r.success) syncedDays++;
+            totalEntries += r.entriesCount;
+        });
+
+        daysProcessed += batch.length;
+        const currentProgress = Math.round((daysProcessed / totalDays) * 100);
+
+        if (currentProgress > lastProgress) {
+            if (onProgress) onProgress(`PROGRESS: ${currentProgress}%`);
+            lastProgress = currentProgress;
+        }
+
+        // Log Month Change based on last item in batch
+        const lastBatchDate = batch[batch.length - 1];
+        const currentMonthStr = format(lastBatchDate, 'MMMM yyyy');
+        if (currentMonthStr !== lastLoggedMonth) {
+            if (onProgress) onProgress(`MONTH_START:${currentMonthStr}`);
+            lastLoggedMonth = currentMonthStr;
+        }
+    }
+
+    // Clear caches for all Active Users
+    await db.user.updateMany({
+        where: { id: { in: Array.from(activeUserSet) } },
+        data: { statsCache: null, statsGeneratedAt: null }
+    });
+
+    return { syncedDays, totalEntries };
+}

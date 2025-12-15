@@ -2,6 +2,7 @@
 import { pbkdf2, randomBytes, timingSafeEqual } from 'crypto';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import { NextRequest } from 'next/server';
 
 const secret = process.env.JWT_SECRET;
 if (!secret && process.env.NODE_ENV === 'production') {
@@ -51,25 +52,29 @@ export async function createAdminSession(username: string) {
     });
 }
 
-export async function verifyAdminSession() {
-    const cookieStore = await cookies();
+export async function verifyAdminSession(req?: NextRequest) {
+    const cookieStore = req ? req.cookies : await cookies();
     const token = cookieStore.get('admin_session')?.value;
+
     if (!token) return null;
 
     try {
         const { payload } = await jwtVerify(token, key);
 
         // Extra security: Ensure the user actually exists in the DB
-        // This handles cases where the DB was reset but cookies persist
-        const cx = await import('@/lib/db'); // Dynamic import to avoid circular dep issues if any
+        const cx = await import('@/lib/db');
         const user = await cx.default.adminUser.findFirst({
             where: { username: payload.username as string }
         });
 
-        if (!user) return null;
+        if (!user) {
+            console.error("Admin session verification failed: User not found in DB", payload.username);
+            return null;
+        }
 
         return payload;
     } catch (e) {
+        console.error("Admin session verification error:", e);
         return null;
     }
 }

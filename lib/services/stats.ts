@@ -36,6 +36,13 @@ export interface StatsResult {
     commitmentIssues: { count: number; titles: string[] };
     aiSummary?: string;
     valueProposition?: number;
+    comparison: {
+        you: { seconds: number; label: string };
+        average: { seconds: number; label: string };
+        top: { seconds: number; label: string };
+        bottom: { seconds: number; label: string };
+        leaderboard: { label: string; seconds: number; isYou: boolean }[];
+    };
 }
 
 export async function getStats(userId: number, year?: number, from?: Date, to?: Date, options: { forceRefresh?: boolean } = {}): Promise<StatsResult> {
@@ -522,6 +529,126 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     const tvValue = (tvHours / 10.0) * 15.49;
     const totalValue = Math.round(movieValue + tvValue);
 
+    const GOD_TIER = [
+        "The Server Load", "Vitamin D Deficient", "The Retina Burner", "Premium Bandwidth Hog",
+        "CEO of Binging", "The Electricity Bill", "Couch Fossil", "The 4K Connoisseur",
+        "No Life Detected", "The Main Character"
+    ];
+    const HIGH_TIER = [
+        "The Binge-Watcher", "Content Sommelier", "Professional Procrastinator", "Sleep Deprived",
+        "The Marathon Runner", "Remote Control Dictator", "Subtitle Scholar", "WiFi Warrior",
+        "Pixel Perfect", "The Introvert"
+    ];
+    const MID_TIER = [
+        "The Normie", "Casual Friday", "The 'Just One Episode' Liar", "Healthy Social Life (Sarcastically)",
+        "The NPC", "Weekend Warrior", "Background Noise Expert", "The 720p Enjoyer",
+        "Buffer Buddy", "Average Joe"
+    ];
+    const LOW_TIER = [
+        "The Tourist", "Touching Grass", "The Monthly Login", "Forgotten Password",
+        "The Guest Account", "Are You Still Watching?", "The Trailer Watcher",
+        "Dial-Up Survivor", "The Lurker", "Participation Trophy"
+    ];
+    const FREELOADER_TIER = [
+        "The Freeloader", "Waste of a Seat", "Plex Pass Denier", "The Ghost",
+        "Who Is This?", "Bandwidth Savior", "Log In, Log Out", "The Myth",
+        "404 User Not Found", "Lowest of Them All"
+    ];
+
+    const pickName = (list: string[]) => list[Math.floor(Math.random() * list.length)];
+
+    // 9. Comparison Logic (Phase 7) - Leaderboard
+    const comparison = {
+        you: { seconds: totalSeconds, label: "You" },
+        average: { seconds: 0, label: "Average" },
+        top: { seconds: 0, label: "Top" },
+        bottom: { seconds: 0, label: "Bottom" },
+        leaderboard: [] as { label: string; seconds: number; isYou: boolean }[]
+    };
+
+    try {
+        // 1. Fetch ALL users first (to handle those with 0 history)
+        const allUsers = await db.user.findMany({
+            select: { id: true, username: true }
+        });
+
+        // 2. Fetch Aggregated Duration for the period
+        const durations = await db.watchHistory.groupBy({
+            by: ['userId'],
+            where: {
+                date: { gte: startDate, lt: endDate }
+            },
+            _sum: { duration: true }
+        });
+
+        // 3. Map Durations
+        const durationMap: Record<number, number> = {};
+        durations.forEach(d => {
+            durationMap[d.userId] = d._sum.duration || 0;
+        });
+
+        let grandTotal = 0;
+        const leaderboard = allUsers.map(u => {
+            const seconds = durationMap[u.id] || 0;
+            grandTotal += seconds;
+            return {
+                id: u.id, // Needed for deterministic random seeding
+                label: u.username || `User ${u.id}`,
+                seconds,
+                isYou: u.id === userId
+            };
+        });
+
+        // Sort descending
+        leaderboard.sort((a, b) => b.seconds - a.seconds);
+
+        // Assign Anonymized Names based on Rank/Tier
+        const grandTotalSeconds = grandTotal; // Capture total for average calc
+
+        const finalLeaderboard = leaderboard.map((item, index) => {
+            // 1. Identification
+            if (item.isYou) return { label: "You", seconds: item.seconds, isYou: true };
+
+            // 2. Anonymization Logic
+            let list = MID_TIER;
+            const pct = 1 - (index / leaderboard.length); // 1.0 (Top) -> 0.0 (Bottom)
+
+            if (item.seconds === 0) {
+                list = FREELOADER_TIER;
+            } else if (pct >= 0.9) {
+                list = GOD_TIER;
+            } else if (pct >= 0.70) {
+                list = HIGH_TIER;
+            } else if (pct >= 0.25) {
+                list = MID_TIER;
+            } else {
+                list = LOW_TIER;
+            }
+
+            // Deterministic Name Selection (User ID + Index to avoid collisions for same ID in different years/contexts mostly)
+            // Using index helps spread the names out if we simply iterated the list, but using ID keeps it stable for the user.
+            // Let's use ID for stability.
+            const name = list[item.id % list.length];
+
+            // Check for duplicates? For now, collisions are funny. "The Normie" vs "The Normie".
+            return { label: name, seconds: item.seconds, isYou: false };
+        });
+
+        // Stats
+        const count = finalLeaderboard.length;
+        const avg = count > 0 ? Math.round(grandTotalSeconds / count) : 0;
+        const top = finalLeaderboard[0] || { label: "None", seconds: 0 };
+        const bottom = finalLeaderboard[finalLeaderboard.length - 1] || { label: "None", seconds: 0 };
+
+        comparison.average.seconds = avg;
+        comparison.top = { seconds: top.seconds, label: top.label };
+        comparison.bottom = { seconds: bottom.seconds, label: bottom.label };
+        comparison.leaderboard = finalLeaderboard;
+
+    } catch (e) {
+        console.error("Comparison calc failed", e);
+    }
+
     const result: StatsResult = {
         totalDuration, totalSeconds, topShows, lazyDay, activityType,
         oldestMovie: oldestMovieRaw ? { title: oldestMovieRaw.title, year: oldestMovieRaw.year! } : undefined,
@@ -536,7 +663,8 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         techStats: { totalDataGB, transcodePercent, topPlatforms },
         commitmentIssues: { count: uncommittedCount, titles: uncommittedTitles },
         aiSummary,
-        valueProposition: totalValue // Added field
+        valueProposition: totalValue,
+        comparison
     };
 
     // Cache the result
@@ -560,4 +688,25 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     }
 
     return result;
+}
+
+export async function generateGlobalStats(onProgress?: (msg: string) => void) {
+    const users = await db.user.findMany({ select: { id: true, username: true } });
+    let count = 0;
+    const total = users.length;
+
+    if (onProgress) onProgress(`INFO: Starting generation for ${total} users...`);
+
+    for (const user of users) {
+        count++;
+        const progress = Math.round((count / total) * 100);
+        if (onProgress) onProgress(`GENERATING: [${count}/${total}] ${user.username || 'User ' + user.id} (${progress}%)`);
+
+        try {
+            await getStats(user.id, undefined, undefined, undefined, { forceRefresh: true });
+        } catch (e: any) {
+            if (onProgress) onProgress(`ERROR: Failed for ${user.username}: ${e.message}`);
+        }
+    }
+    if (onProgress) onProgress(`INFO: Generation Complete!`);
 }
