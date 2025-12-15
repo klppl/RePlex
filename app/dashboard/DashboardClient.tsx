@@ -426,10 +426,35 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                                 <div className="text-6xl md:text-8xl font-black text-white mb-4 tracking-tighter">
                                     ${stats.valueProposition.toLocaleString()}
                                 </div>
-                                <p className="text-xl text-slate-400 max-w-2xl">
+                                <div className="text-xl text-slate-400 max-w-2xl">
                                     That's how much this content would have cost you <span className="text-emerald-400 font-bold">at market value</span>.
-                                    <br /><span className="text-sm opacity-60">(Based on $12.00/movie and $15.49/mo for TV currently)</span>
-                                </p>
+                                    <p className="mt-4 text-sm text-slate-500 italic">
+                                        $12 per movie + one month's sub ($15.49) for every 10h of TV.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 7b. PIRATE BAY VALUE */}
+                    {stats.pirateBayValue && (
+                        <div className="mt-8 bg-slate-900 p-12 rounded-3xl border border-slate-800 hover:border-red-600/50 transition group relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition transform group-hover:scale-110 duration-700">
+                                <span className="text-9xl">🏴‍☠️</span>
+                            </div>
+
+                            <h3 className="text-red-500 uppercase tracking-widest text-sm font-bold mb-4">The "Find Out" Value</h3>
+
+                            <div className="relative z-10">
+                                <div className="text-6xl md:text-8xl font-black text-white mb-4 tracking-tighter drop-shadow-[0_0_15px_rgba(220,38,38,0.5)]">
+                                    ${stats.pirateBayValue.toLocaleString()}
+                                </div>
+                                <div className="text-xl text-slate-400 max-w-2xl">
+                                    That's how much this content would have cost you <span className="text-red-500 font-bold">in legal fines</span>.
+                                    <p className="mt-4 text-sm text-slate-500 italic">
+                                        Calculated based on maximum US statutory damages for willful infringement ($150k per title).
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     )}

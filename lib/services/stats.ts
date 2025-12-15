@@ -36,6 +36,7 @@ export interface StatsResult {
     commitmentIssues: { count: number; titles: string[] };
     aiSummary?: string;
     valueProposition?: number;
+    pirateBayValue?: number;
     comparison: {
         you: { seconds: number; label: string };
         average: { seconds: number; label: string };
@@ -529,6 +530,17 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     const tvValue = (tvHours / 10.0) * 15.49;
     const totalValue = Math.round(movieValue + tvValue);
 
+    // 9. Pirate Bay Value (The "Find Out" Phase)
+    // US Statutory damages for willful infringement: up to $150,000 per work.
+    // This is the "High Score" of legal penalties.
+    const uniqueEpisodesCount = await db.watchHistory.groupBy({
+        by: ['ratingKey'],
+        where: { ...where, mediaType: 'episode' }
+    });
+    const episodeCount = uniqueEpisodesCount.length;
+    const pirateBayValue = (movieCount + episodeCount) * 150000;
+
+    // 10. Tier Logic
     const GOD_TIER = [
         "The Server Load", "Vitamin D Deficient", "The Retina Burner", "Premium Bandwidth Hog",
         "CEO of Binging", "The Electricity Bill", "Couch Fossil", "The 4K Connoisseur",
@@ -664,6 +676,7 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         commitmentIssues: { count: uncommittedCount, titles: uncommittedTitles },
         aiSummary,
         valueProposition: totalValue,
+        pirateBayValue: pirateBayValue,
         comparison
     };
 
