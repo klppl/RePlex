@@ -28,10 +28,13 @@ export async function GET() {
 
 export async function POST(request: Request) {
     try {
-        const session = await verifyAdminSession();
-        if (!session) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        // 1. Check if setup is already complete
+        const adminCount = await db.adminUser.count();
+        if (adminCount > 0) {
+            return NextResponse.json({ error: 'Setup already complete. Use Admin Dashboard.' }, { status: 403 });
         }
+
+        // No session check needed for initial setup (as no admins exist)
 
         const body = await request.json();
         const { ip, port, apiKey, useSsl, rootPath } = body;

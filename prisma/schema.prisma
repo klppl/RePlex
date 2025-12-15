@@ -49,6 +49,9 @@ model User {
   
   statsCache       String?  // JSON string of StatsResult
   statsGeneratedAt DateTime?
+
+  loginToken       String?  @unique
+  tokenExpiresAt   DateTime?
   
   history  WatchHistory[]
   syncLogs SyncLog[]

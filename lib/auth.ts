@@ -1,7 +1,11 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const SECRET_KEY = process.env.JWT_SECRET || 'super-secret-key-change-this';
+const secret = process.env.JWT_SECRET;
+if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error("FATAL: JWT_SECRET is not defined. Check your environment variables.");
+}
+const SECRET_KEY = secret || 'super-secret-key-change-this';
 const key = new TextEncoder().encode(SECRET_KEY);
 
 export async function signSession(userId: number, username: string) {

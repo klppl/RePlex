@@ -9,7 +9,11 @@ import { syncHistoryForUser } from '../services/sync';
 import { SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'changeme');
+const secret = process.env.JWT_SECRET;
+if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error("FATAL: JWT_SECRET is not defined. Check your environment variables.");
+}
+const JWT_SECRET = new TextEncoder().encode(secret || 'changeme');
 const MASK = "••••••••";
 
 export interface AdminUserType {
@@ -122,6 +126,34 @@ export async function deleteUser(userId: number) {
     } catch (error) {
         console.error("Failed to delete user:", error);
         return { success: false, error: "Failed to delete user" };
+    }
+}
+
+export async function generateLoginLink(userId: number) {
+    try {
+        const session = await verifyAdminSession();
+        if (!session) throw new Error("Unauthorized");
+
+        // Generate 32 bytes hex token (64 hex chars) - high entropy
+        // We use dynamic import for crypto to be safe if this file is imported in edge-like contexts (though actions are server)
+        const { randomBytes } = await import('crypto');
+        const token = randomBytes(32).toString('hex');
+
+        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours validity
+
+        await db.user.update({
+            where: { id: userId },
+            data: {
+                loginToken: token,
+                tokenExpiresAt: expiresAt
+            }
+        });
+
+        revalidatePath('/admin');
+        return { success: true, token };
+    } catch (error: any) {
+        console.error("Failed to generate link:", error);
+        return { success: false, error: error.message || "Failed to generate link" };
     }
 }
 

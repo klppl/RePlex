@@ -9,12 +9,19 @@ RUN --mount=type=cache,target=/root/.npm npm ci
 
 # Rebuild the source code only when needed
 FROM node:20-alpine AS builder
+# Install openssl for Prisma
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Generate Prisma Client for the correct target
 RUN npx prisma generate
+
+# Set dummy secret for build (checks disabled or passed)
+ENV JWT_SECRET="build_secret_placeholder"
+ENV NEXT_TELEMETRY_DISABLED 1
 RUN npm run build
 
 # Production image, copy all the files and run next
@@ -23,7 +30,7 @@ WORKDIR /app
 
 ENV NODE_ENV production
 # Uncomment the following line in case you want to disable telemetry during runtime.
-# ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED 1
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs

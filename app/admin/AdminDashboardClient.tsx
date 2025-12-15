@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { AdminUserType, purgeAllData, syncTautulliUsers, syncAllUsersHistory, saveSystemConfig, deleteUser, generateUserStats, generateAllStats } from "@/lib/actions/admin";
+import { AdminUserType, purgeAllData, syncTautulliUsers, syncAllUsersHistory, saveSystemConfig, deleteUser, generateUserStats, generateAllStats, generateLoginLink } from "@/lib/actions/admin";
 import { formatDistanceToNow } from 'date-fns';
 
 type AdminView = 'users' | 'settings' | 'setup' | 'login';
@@ -144,6 +144,17 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
             window.location.href = '/';
         } catch (e) {
             window.location.href = '/';
+        }
+    };
+
+    const handleGenerateLink = async (id: number) => {
+        const res = await generateLoginLink(id);
+        if (res.success && res.token) {
+            const url = `${window.location.origin}/login?token=${res.token}`;
+            // Use a nice prompt or modal, but prompt is easy for copy
+            prompt("Copy this secure login link and send it to the user:", url);
+        } else {
+            alert("Failed to generate link: " + res.error);
         }
     };
 
@@ -316,6 +327,13 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
 
                             <div className="flex items-center gap-3 w-full md:w-auto">
                                 <button
+                                    onClick={() => handleGenerateLink(user.id)}
+                                    className="flex-1 md:flex-none px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded-lg text-sm font-bold transition"
+                                    title="Generate Login Link"
+                                >
+                                    🔑 Link
+                                </button>
+                                <button
                                     onClick={() => handleGenerateUser(user.id)}
                                     disabled={generatingId === user.id}
                                     className="flex-1 md:flex-none px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/50 rounded-lg text-sm font-bold transition disabled:opacity-50"
@@ -323,13 +341,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                                 >
                                     {generatingId === user.id ? '...' : '↻ Gen'}
                                 </button>
-                                <button
-                                    onClick={() => router.push(`/dashboard?userId=${user.id}`)}
-                                    disabled={user.historyCount === 0}
-                                    className="flex-1 md:flex-none px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/50 rounded-lg text-sm font-bold transition disabled:opacity-30 disabled:cursor-not-allowed"
-                                >
-                                    View
-                                </button>
+
                                 <button
                                     onClick={() => {
                                         const url = `${window.location.origin}/dashboard?userId=${user.id}`;

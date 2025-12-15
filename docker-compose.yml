@@ -8,3 +8,4 @@ services:
       - ./prisma:/app/prisma
     environment:
       - DATABASE_URL=file:/app/prisma/dev.db
+      - JWT_SECRET=CHANGE_THIS_SECRET_IN_PRODUCTION_!!!!

@@ -1,15 +1,38 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { verifySession } from '@/lib/auth';
+import { jwtVerify } from 'jose';
 
+const secret = process.env.JWT_SECRET;
+if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error("FATAL: JWT_SECRET is not defined. Check your environment variables.");
+}
+const SECRET_KEY = secret || 'super-secret-key-change-this';
+const key = new TextEncoder().encode(SECRET_KEY);
 export async function middleware(request: NextRequest) {
-    // 1. Setup paths that require auth (optional for this demo, usually protected routes)
-    // For now, allow everything, but if dashboard is accessed, maybe check?
-    // User asked for SSO login flow.
-    // We won't block /dashboard strictly via middleware yet to keep verification scripts easy if they curl without headers?
-    // Actually verification scripts run locally via ts-node, bypassing standard HTTP stack or hitting API directly.
-    // The API routes /api/sync and /api/stats accept params, but for real app should use session.
-    // Let's attach user info to headers if session exists.
+    // 1. Admin Route Protection
+    if (request.nextUrl.pathname.startsWith('/admin')) {
+        const adminToken = request.cookies.get('admin_session')?.value;
+        const isLoginPage = request.nextUrl.pathname === '/admin/login';
+
+        let isAdmin = false;
+        if (adminToken) {
+            try {
+                await jwtVerify(adminToken, key);
+                isAdmin = true;
+            } catch (e) { }
+        }
+
+        if (!isAdmin && !isLoginPage) {
+            return NextResponse.redirect(new URL('/admin/login', request.url));
+        }
+
+        if (isAdmin && isLoginPage) {
+            return NextResponse.redirect(new URL('/admin', request.url));
+        }
+    }
+
+    // 2. User Session Handling (for header injection)
 
     const token = request.cookies.get('auth_token')?.value;
 
@@ -29,5 +52,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ['/dashboard/:path*', '/api/:path*'],
+    matcher: ['/dashboard/:path*', '/api/:path*', '/admin/:path*'],
 };

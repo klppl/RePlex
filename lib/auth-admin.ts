@@ -3,7 +3,11 @@ import { pbkdf2, randomBytes, timingSafeEqual } from 'crypto';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const SECRET_KEY = process.env.JWT_SECRET || 'super-secret-key-change-this';
+const secret = process.env.JWT_SECRET;
+if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error("FATAL: JWT_SECRET is not defined. Check your environment variables.");
+}
+const SECRET_KEY = secret || 'super-secret-key-change-this';
 const key = new TextEncoder().encode(SECRET_KEY);
 
 export async function hashPassword(password: string): Promise<string> {
@@ -64,6 +68,14 @@ export async function verifyAdminSession() {
 
         if (!user) return null;
 
+        return payload;
+    } catch (e) {
+        return null;
+    }
+}
+export async function verifyAdminToken(token: string) {
+    try {
+        const { payload } = await jwtVerify(token, key);
         return payload;
     } catch (e) {
         return null;

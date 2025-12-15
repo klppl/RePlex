@@ -108,10 +108,21 @@ export async function syncHistoryForUser(
             }
 
             if (history.length > 0 && validItems.length === 0) {
-                const msg = `WARN: Found ${history.length} items for ${formattedDate} but filtered all!`;
-                if (onProgress) {
-                    const hDate = new Date(history[0].date * 1000);
-                    onProgress(`${msg} Sample: ${format(hDate, 'yyyy-MM-dd HH:mm')} vs Current: ${format(currentDate, 'yyyy-MM-dd HH:mm')}`);
+                // Check if these are just adjacent day overlaps (timezone differences)
+                const allAdjacent = history.every(h => {
+                    const hDate = new Date(h.date * 1000);
+                    return Math.abs(differenceInCalendarDays(hDate, currentDate)) <= 1;
+                });
+
+                if (!allAdjacent) {
+                    const msg = `WARN: Found ${history.length} items for ${formattedDate} but filtered all!`;
+                    if (onProgress) {
+                        const hDate = new Date(history[0].date * 1000);
+                        onProgress(`${msg} Sample: ${format(hDate, 'yyyy-MM-dd HH:mm')} vs Current: ${format(currentDate, 'yyyy-MM-dd HH:mm')}`);
+                    }
+                } else {
+                    // Benign overlap, ignore or log debug
+                    // console.log(`[SYNC] Ignored ${history.length} overlapping items for ${formattedDate}`);
                 }
             }
 
