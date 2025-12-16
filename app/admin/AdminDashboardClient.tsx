@@ -15,7 +15,7 @@ interface Props {
         config: any;
         aiConfig: any;
         mediaConfig: any;
-    };
+    } | null;
     isAuthenticated: boolean;
 }
 
@@ -204,39 +204,89 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
     }, [terminalLogs]);
 
 
+
     const handleSyncAll = async () => {
+        if (!confirm("This will trigger a full global sync for the current year. It may take a long time and put load on Tautulli. Continue?")) return;
         setIsStreaming(true);
-        setTerminalLogs(['Initializing global sync...']);
+        if (!isTerminalContentVisible) setIsTerminalContentVisible(true);
+        setTerminalLogs(['Initializing global sync protocol...']);
 
         try {
             const response = await fetch('/api/admin/sync');
             const reader = response.body?.getReader();
-            if (!reader) throw new Error('Failed to start stream');
-
             const decoder = new TextDecoder();
+
+            if (!reader) throw new Error("Failed to initialize stream");
 
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
-
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n').filter(Boolean);
-
-                setTerminalLogs(prev => {
-                    // Keep last 1000 lines
-                    const newLogs = [...prev, ...lines];
-                    return newLogs.slice(-1000);
-                });
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n').filter(line => line.trim() !== '');
+                setTerminalLogs(prev => [...prev, ...lines]);
             }
-
-            // Refresh logic if needed, or just let users reload manually
-            // window.location.reload(); 
-        } catch (error) {
-            console.error(error);
-            setTerminalLogs(prev => [...prev, `[ERROR] Connection failed: ${error}`]);
+        } catch (error: any) {
+            setTerminalLogs(prev => [...prev, `ERROR: ${error.message}`]);
         } finally {
             setIsStreaming(false);
+            setTerminalLogs(prev => [...prev, 'Sync process finished.']);
         }
+    };
+    const abortControllerRef = useRef<AbortController | null>(null);
+
+    const handleOmdbSync = async () => {
+        setIsStreaming(true);
+        if (!isTerminalContentVisible) setIsTerminalContentVisible(true);
+        setTerminalLogs(prev => [...prev, 'Starting Metadata Enrichment...']);
+
+        // Abort previous if any
+        if (abortControllerRef.current) abortControllerRef.current.abort();
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
+        try {
+            const response = await fetch('/api/admin/omdb', {
+                signal: controller.signal
+            });
+
+            if (response.status === 401) {
+                setTerminalLogs(prev => [...prev, 'ERROR: Unauthorized. Please log in.']);
+                return;
+            }
+
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+
+            if (!reader) throw new Error("Failed to initialize stream");
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n').filter(line => line.trim() !== '');
+                setTerminalLogs(prev => [...prev, ...lines]);
+            }
+        } catch (error: any) {
+            if (error.name === 'AbortError') {
+                setTerminalLogs(prev => [...prev, '⏸ PROCESS PAUSED/STOPPED BY USER.']);
+            } else {
+                setTerminalLogs(prev => [...prev, `ERROR: ${error.message}`]);
+            }
+        } finally {
+            setIsStreaming(false);
+            if (abortControllerRef.current === controller) {
+                abortControllerRef.current = null;
+            }
+        }
+    };
+
+    const handleStop = (clearLogs = false) => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+        setIsStreaming(false);
+        if (clearLogs) setTerminalLogs([]);
     };
 
     const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -289,6 +339,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                         {isSyncing ? 'Syncing List...' : '🔄 Sync List'}
                     </button>
 
+
                     <button
                         onClick={handleSyncAll}
                         disabled={isStreaming}
@@ -297,7 +348,14 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                     >
                         {isStreaming ? 'Downloading...' : '⬇️ Download All Data'}
                     </button>
-
+                    <button
+                        onClick={handleOmdbSync}
+                        disabled={isStreaming}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${isStreaming ? 'bg-amber-600/50 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-500 text-white'}`}
+                        title="Download OMDb Metadata"
+                    >
+                        {isStreaming ? 'Fetching...' : '🎬 Download Metadata'}
+                    </button>
                     {view === 'users' && users.length > 0 && (
                         <button
                             onClick={handleGenerateAll}
@@ -448,52 +506,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                 )}
             </div>
 
-            {/* Danger Zone */}
-            <div className="mt-12 pt-12 border-t border-slate-800/50">
-                <h2 className="text-2xl font-bold text-red-500 flex items-center gap-3 mb-6">
-                    <span className="bg-red-500/10 p-2 rounded-lg">⚠️</span>
-                    Danger Zone
-                </h2>
 
-                <div className="bg-red-950/20 border border-red-500/30 p-8 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-8">
-                    <div>
-                        <h3 className="text-xl font-bold text-red-400 mb-2">Factory Reset</h3>
-                        <p className="text-red-200/60 max-w-lg">
-                            This will permanently delete ALL data, including the database, user history, and the admin account.
-                            The application will return to the setup screen.
-                            <br /><strong className="text-red-400">This action cannot be undone.</strong>
-                        </p>
-                    </div>
-
-                    {!confirmPurge ? (
-                        <button
-                            onClick={() => setConfirmPurge(true)}
-                            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg shadow-red-900/20 transition transform active:scale-95"
-                        >
-                            Purge All Data
-                        </button>
-                    ) : (
-                        <div className="flex flex-col items-center gap-3 animate-in fade-in zoom-in duration-200">
-                            <p className="text-red-400 font-bold text-sm uppercase tracking-wider">Are you absolutely sure?</p>
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => setConfirmPurge(false)}
-                                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handlePurge}
-                                    disabled={isPurging}
-                                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg shadow-lg"
-                                >
-                                    {isPurging ? 'Nuking...' : 'Yes, Delete Everything'}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
         </div >
     );
 
@@ -560,6 +573,10 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                         <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">TVDB API Key</label>
                         <input name="tvdbApiKey" type="password" defaultValue={status.mediaConfig?.tvdbApiKey || ''} placeholder="Even more metadata..." className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-amber-500 outline-none transition" />
                     </div>
+                    <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">OMDb API Key</label>
+                        <input name="omdbApiKey" type="password" defaultValue={status.mediaConfig?.omdbApiKey || ''} placeholder="Rotten Tomatoes & Box Office Data..." className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-amber-500 outline-none transition" />
+                    </div>
                 </div>
 
                 {/* Admin Account - Only if Setup Mode (Creating New) */}
@@ -577,31 +594,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                     </div>
                 )}
 
-                {/* Maintenance Section - Only show when not in setup mode */}
-                {view !== 'setup' && (
-                    <div className="space-y-6 pt-8 border-t border-slate-800">
-                        <h3 className="text-lg font-bold text-blue-400 uppercase tracking-widest text-xs border-b border-slate-800 pb-2">Maintenance</h3>
 
-                        <div className="bg-slate-950/30 p-6 rounded-xl border border-blue-500/10 flex items-center justify-between gap-4">
-                            <div>
-                                <h4 className="text-white font-bold mb-1">Pre-fetch User History</h4>
-                                <p className="text-slate-400 text-sm">
-                                    Download all history for the current year for ALL active users. This makes the user dashboard load instantly.
-                                    <br />
-                                    <span className="text-xs text-slate-500 italic">Warning: This may take a while depending on the number of users.</span>
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={handleSyncAll}
-                                disabled={isStreaming}
-                                className="px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition disabled:opacity-50 flex-shrink-0"
-                            >
-                                {isStreaming ? 'Syncing...' : 'Sync All Data'}
-                            </button>
-                        </div>
-                    </div>
-                )}
 
                 {configError && (
                     <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-sm text-center">
@@ -613,6 +606,58 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                     {configLoading ? 'Saving...' : (view === 'setup' ? 'Complete Setup 🚀' : 'Save Changes')}
                 </button>
             </form>
+
+            {/* Danger Zone - Moved to Settings */}
+            {view !== 'setup' && (
+                <div className="mt-12 pt-12 border-t border-slate-800/50">
+                    <h2 className="text-2xl font-bold text-red-500 flex items-center gap-3 mb-6">
+                        <span className="bg-red-500/10 p-2 rounded-lg">⚠️</span>
+                        Danger Zone
+                    </h2>
+
+                    <div className="bg-red-950/20 border border-red-500/30 p-8 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-8">
+                        <div>
+                            <h3 className="text-xl font-bold text-red-400 mb-2">Factory Reset</h3>
+                            <p className="text-red-200/60 max-w-lg">
+                                This will permanently delete ALL data, including the database, user history, and the admin account.
+                                The application will return to the setup screen.
+                                <br /><strong className="text-red-400">This action cannot be undone.</strong>
+                            </p>
+                        </div>
+
+                        {!confirmPurge ? (
+                            <button
+                                type="button"
+                                onClick={() => setConfirmPurge(true)}
+                                className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg shadow-red-900/20 transition transform active:scale-95"
+                            >
+                                Purge All Data
+                            </button>
+                        ) : (
+                            <div className="flex flex-col items-center gap-3 animate-in fade-in zoom-in duration-200">
+                                <p className="text-red-400 font-bold text-sm uppercase tracking-wider">Are you absolutely sure?</p>
+                                <div className="flex gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setConfirmPurge(false)}
+                                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handlePurge}
+                                        disabled={isPurging}
+                                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg shadow-lg"
+                                    >
+                                        {isPurging ? 'Nuking...' : 'Yes, Delete Everything'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 
@@ -691,11 +736,43 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
         </div>
     );
 
+    const renderTerminalControls = () => (
+        <div className="flex gap-2 justify-end mt-2">
+            {!isStreaming ? (
+                <button
+                    onClick={handleOmdbSync}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs tracking-wider flex items-center gap-2"
+                >
+                    ▶ RESUME DOWNLOAD
+                </button>
+            ) : (
+                <button
+                    onClick={() => handleStop(false)}
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg text-xs tracking-wider flex items-center gap-2"
+                >
+                    ⏸ PAUSE
+                </button>
+            )}
+
+            <button
+                onClick={() => handleStop(true)}
+                className="px-4 py-2 bg-red-900/50 hover:bg-red-800 text-red-200 border border-red-800 rounded-lg text-xs tracking-wider flex items-center gap-2"
+            >
+                ⏹ STOP
+            </button>
+        </div>
+    );
+
     return (
         <div className="min-h-screen bg-slate-950 text-white p-8">
             <div className="max-w-6xl mx-auto space-y-8">
                 {renderHeader()}
-                {view !== 'login' && view !== 'setup' && renderTerminal()}
+                {view !== 'login' && view !== 'setup' && (
+                    <>
+                        {renderTerminal()}
+                        {renderTerminalControls()}
+                    </>
+                )}
                 {renderNav()}
 
                 {view === 'users' && renderUsers()}

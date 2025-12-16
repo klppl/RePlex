@@ -246,7 +246,8 @@ export async function getSystemStatus() {
             mediaConfig: mediaConfig ? {
                 ...mediaConfig,
                 tmdbApiKey: mediaConfig.tmdbApiKey ? MASK : null,
-                tvdbApiKey: mediaConfig.tvdbApiKey ? MASK : null
+                tvdbApiKey: mediaConfig.tvdbApiKey ? MASK : null,
+                omdbApiKey: mediaConfig.omdbApiKey ? MASK : null
             } : null
         };
     } catch (error) {
@@ -304,6 +305,7 @@ export async function saveSystemConfig(data: any) {
         const mediaData = {
             tmdbApiKey: (data.tmdbApiKey === MASK && existingMedia) ? existingMedia.tmdbApiKey : (data.tmdbApiKey || null),
             tvdbApiKey: (data.tvdbApiKey === MASK && existingMedia) ? existingMedia.tvdbApiKey : (data.tvdbApiKey || null),
+            omdbApiKey: (data.omdbApiKey === MASK && existingMedia) ? existingMedia.omdbApiKey : (data.omdbApiKey || null),
         };
 
         if (existingMedia) {

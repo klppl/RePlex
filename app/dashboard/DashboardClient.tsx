@@ -789,6 +789,145 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                             </div>
                         </div>
 
+                        {/* 10. QUALITY CONTROL (Polished Edition) */}
+                        {stats.qualityStats && stats.qualityStats.average > 0 && (
+                            <div className="bg-slate-900 p-8 md:p-10 rounded-3xl border border-slate-800 flex flex-col hover:border-teal-500/50 transition group relative overflow-hidden">
+                                {/* Background Masks - Lighter and Larger */}
+                                <div className="absolute -top-10 -right-10 p-8 opacity-5 group-hover:opacity-10 transition transform group-hover:rotate-12 duration-1000 select-none pointer-events-none">
+                                    <span className="text-[15rem]">🎭</span>
+                                </div>
+
+                                <div className="flex justify-between items-start mb-8 z-10 relative">
+                                    <h3 className="text-teal-400 uppercase tracking-widest text-sm font-bold">Quality Profile</h3>
+                                </div>
+
+                                <div className="relative z-10 grid grid-cols-1 md:grid-cols-4 gap-8 md:gap-12 items-center">
+
+                                    {/* LEFT: Score Circle (25%) */}
+                                    <div className="col-span-1 flex justify-center md:justify-start">
+                                        <div className="relative w-40 h-40 md:w-48 md:h-48 flex items-center justify-center">
+                                            {/* SVG Progress Ring */}
+                                            <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
+                                                {/* Background Circle */}
+                                                <circle
+                                                    cx="50" cy="50" r="45"
+                                                    fill="transparent"
+                                                    stroke="#1e293b"
+                                                    strokeWidth="6"
+                                                />
+                                                {/* Progress Circle */}
+                                                <circle
+                                                    cx="50" cy="50" r="45"
+                                                    fill="transparent"
+                                                    stroke={stats.qualityStats.average >= 80 ? '#2dd4bf' : stats.qualityStats.average >= 60 ? '#facc15' : '#f87171'}
+                                                    strokeWidth="6"
+                                                    strokeDasharray="283"
+                                                    strokeDashoffset={283 - (283 * stats.qualityStats.average) / 100}
+                                                    strokeLinecap="round"
+                                                    className="transition-all duration-1000 ease-out"
+                                                />
+                                            </svg>
+
+                                            <div className="flex flex-col items-center z-10">
+                                                <div className={`text-6xl md:text-7xl font-black tracking-tighter ${stats.qualityStats.average >= 80 ? 'text-teal-400' : stats.qualityStats.average >= 60 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                                    {stats.qualityStats.average}
+                                                </div>
+                                                <div className="text-[10px] md:text-xs uppercase tracking-[0.2em] text-slate-500 font-bold mt-1">AVG SCORE</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* RIGHT: Content (75%) */}
+                                    <div className="col-span-1 md:col-span-3 flex flex-col text-center md:text-left">
+
+                                        {/* Badge Title */}
+                                        <div className="mb-4">
+                                            <span className="inline-block bg-teal-500 text-slate-950 px-4 py-1.5 rounded-full text-sm font-black uppercase tracking-widest shadow-[0_0_15px_rgba(45,212,191,0.3)]">
+                                                {stats.qualityStats.persona.title}
+                                            </span>
+                                        </div>
+
+                                        {/* Description */}
+                                        <p className="text-xl md:text-2xl font-medium text-slate-200 leading-relaxed mb-8">
+                                            {stats.qualityStats.persona.description}
+                                        </p>
+
+                                        {/* Stats Footer: The Proof */}
+                                        <div className="flex flex-col gap-4 pt-6 border-t border-white/5">
+
+                                            {/* Peak Cinema */}
+                                            {(stats.qualityStats.highestMovie || stats.qualityStats.highestShow) && (
+                                                <div className="flex items-center gap-4 bg-slate-950/30 p-3 rounded-xl hover:bg-slate-950/50 transition border border-transparent hover:border-teal-500/20 group/item">
+                                                    <div className="w-10 h-14 bg-slate-800 rounded shadow-lg overflow-hidden flex-shrink-0 relative flex items-center justify-center">
+                                                        {(stats.qualityStats.highestMovie?.poster || stats.qualityStats.highestShow?.poster) ? (
+                                                            <img
+                                                                src={stats.qualityStats.highestMovie ? stats.qualityStats.highestMovie.poster! : stats.qualityStats.highestShow!.poster!}
+                                                                alt="Poster"
+                                                                className="w-full h-full object-cover"
+                                                                onError={(e) => {
+                                                                    e.currentTarget.style.display = 'none';
+                                                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                                }}
+                                                            />
+                                                        ) : null}
+                                                        {/* Fallback Icon (Hidden by default if image exists, shown on error or if no image) */}
+                                                        <div className={`absolute inset-0 flex items-center justify-center bg-slate-800 ${(stats.qualityStats.highestMovie?.poster || stats.qualityStats.highestShow?.poster) ? 'hidden' : ''}`}>
+                                                            <span className="text-xl opacity-20">🍿</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-left min-w-0 flex-1">
+                                                        <div className="flex items-center gap-2 mb-0.5">
+                                                            <span className="text-teal-400 font-bold text-xs uppercase tracking-wider">▲ Peak</span>
+                                                            <span className="bg-teal-500/10 text-teal-400 text-[10px] font-bold px-1.5 py-0.5 rounded border border-teal-500/20">
+                                                                {stats.qualityStats.highestMovie ? stats.qualityStats.highestMovie.score : stats.qualityStats.highestShow?.score}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-white font-bold text-lg leading-none truncate group-hover/item:text-teal-300 transition">
+                                                            {stats.qualityStats.highestMovie ? stats.qualityStats.highestMovie.title : stats.qualityStats.highestShow?.title}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Lowest Point */}
+                                            {(stats.qualityStats.lowestMovie || stats.qualityStats.lowestShow) && (
+                                                <div className="flex items-center gap-4 bg-slate-950/30 p-3 rounded-xl hover:bg-slate-950/50 transition border border-transparent hover:border-red-500/20 group/item">
+                                                    <div className="w-10 h-14 bg-slate-800 rounded shadow-lg overflow-hidden flex-shrink-0 relative flex items-center justify-center grayscale opacity-70 group-hover/item:grayscale-0 group-hover/item:opacity-100 transition">
+                                                        {(stats.qualityStats.lowestMovie?.poster || stats.qualityStats.lowestShow?.poster) ? (
+                                                            <img
+                                                                src={stats.qualityStats.lowestMovie ? stats.qualityStats.lowestMovie.poster! : stats.qualityStats.lowestShow!.poster!}
+                                                                alt="Poster"
+                                                                className="w-full h-full object-cover"
+                                                                onError={(e) => {
+                                                                    e.currentTarget.style.display = 'none';
+                                                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                                }}
+                                                            />
+                                                        ) : null}
+                                                        {/* Fallback Icon */}
+                                                        <div className={`absolute inset-0 flex items-center justify-center bg-slate-800 ${(stats.qualityStats.lowestMovie?.poster || stats.qualityStats.lowestShow?.poster) ? 'hidden' : ''}`}>
+                                                            <span className="text-xl opacity-20">🎬</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-left min-w-0 flex-1">
+                                                        <div className="flex items-center gap-2 mb-0.5">
+                                                            <span className="text-red-400 font-bold text-xs uppercase tracking-wider">▼ Low</span>
+                                                            <span className="bg-red-500/10 text-red-400 text-[10px] font-bold px-1.5 py-0.5 rounded border border-red-500/20">
+                                                                {stats.qualityStats.lowestMovie ? stats.qualityStats.lowestMovie.score : stats.qualityStats.lowestShow?.score}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-white font-bold text-lg leading-none truncate group-hover/item:text-red-300 transition">
+                                                            {stats.qualityStats.lowestMovie ? stats.qualityStats.lowestMovie.title : stats.qualityStats.lowestShow?.title}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* VIBE CHECK (Donut Chart) */}
                         <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-8 hover:border-yellow-500/50 transition group overflow-visible">
                             <div className="flex-1 w-full text-center md:text-left">

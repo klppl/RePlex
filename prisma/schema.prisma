@@ -24,6 +24,7 @@ model MediaConfig {
   id          Int     @id @default(1)
   tmdbApiKey  String?
   tvdbApiKey  String?
+  omdbApiKey  String?
 }
 
 model AiConfig {
@@ -97,4 +98,27 @@ model SyncLog {
   completed Boolean  @default(false)
 
   @@unique([userId, date])
+}
+
+model MediaMetadata {
+  ratingKey       String   @id
+  title           String
+  type            String   // movie, series
+  
+  // IDs
+  imdbId          String?
+  tmdbId          String?
+
+  // Ratings
+  ratingImdb      Float?   // 0-10
+  ratingRtCritic  Int?     // 0-100
+  ratingTmdb      Float?   // 0-10
+
+  // Calculated
+  unifiedScore    Int?     // 0-100
+
+  // Legacy / Cache
+  poster          String?
+  omdbResponse    String?  // Full JSON response
+  updatedAt       DateTime @default(now())
 }

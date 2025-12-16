@@ -68,7 +68,7 @@ export async function verifyAdminSession(req?: NextRequest) {
         });
 
         if (!user) {
-            console.error("Admin session verification failed: User not found in DB", payload.username);
+            // console.warn("Admin session verification failed: User not found in DB", payload.username);
             return null;
         }
 
