@@ -2,18 +2,13 @@
 
 import db from '../db';
 import { revalidatePath } from 'next/cache';
-import { hashPassword, verifyAdminSession } from '../auth-admin';
+import { hashPassword, verifyAdminSession, key as JWT_SECRET } from '../auth-admin';
 import { getStats } from '../services/stats';
 import { syncUsers } from '../services/tautulli';
 import { syncHistoryForUser, syncGlobalHistory } from '../services/sync';
 import { SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 
-const secret = process.env.JWT_SECRET;
-if (!secret && process.env.NODE_ENV === 'production') {
-    throw new Error("FATAL: JWT_SECRET is not defined. Check your environment variables.");
-}
-const JWT_SECRET = new TextEncoder().encode(secret || 'changeme');
 const MASK = "••••••••";
 
 export interface AdminUserType {
@@ -336,7 +331,7 @@ export async function saveSystemConfig(data: any) {
                 .setExpirationTime('24h')
                 .sign(JWT_SECRET);
 
-            (await cookies()).set('admin_token', token, {
+            (await cookies()).set('admin_session', token, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
                 maxAge: 60 * 60 * 24,
