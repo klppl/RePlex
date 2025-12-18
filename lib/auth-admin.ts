@@ -47,7 +47,7 @@ export async function createAdminSession(username: string) {
         expires,
         httpOnly: true,
         path: '/',
-        secure: process.env.NODE_ENV === 'production',
+        secure: process.env.NODE_ENV === 'production' && process.env.DISABLE_SECURE_COOKIES !== 'true',
         sameSite: 'lax'
     });
 }

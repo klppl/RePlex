@@ -310,7 +310,7 @@ export default function DashboardClient({ initialStats, userId, year, shouldGene
             isSyncActive.current = false;
             await new Promise(r => setTimeout(r, 3000));
         } finally {
-            if (!signal?.aborted || completedSuccessfully || (stats.totalSeconds === 0)) { // Ensure loading off if we found no data too
+            if (!signal?.aborted || completedSuccessfully || (stats?.totalSeconds === 0)) { // Ensure loading off if we found no data too
                 setLoading(false);
             }
         }

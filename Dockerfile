@@ -1,3 +1,4 @@
+
 FROM node:20-alpine AS deps
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
 RUN apk add --no-cache libc6-compat
@@ -56,8 +57,8 @@ RUN chown nextjs:nodejs .next
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Copy schema and migrations if needed for prisma db push
-COPY --from=builder /app/prisma ./prisma
+# Copy schema to a safe location (not /app/prisma) to avoid volume masking
+COPY --from=builder /app/prisma ./prisma-schema
 
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
@@ -67,5 +68,13 @@ EXPOSE 3000
 
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
+
+# User Configuration Defaults
+ENV DATABASE_URL="file:/app/prisma/dev.db"
+ENV JWT_SECRET=""
+ENV DISABLE_SECURE_COOKIES="false"
+
+# Persist the database directory
+VOLUME ["/app/prisma"]
 
 ENTRYPOINT ["./docker-entrypoint.sh"]

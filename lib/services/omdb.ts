@@ -43,6 +43,7 @@ export async function fetchOmdbMetadata(title: string, year: number | undefined,
         if (!res.ok) return null;
 
         const data = await res.json() as OmdbResponse;
+        return data; // Fix missing return
     } catch (e) {
         console.error("OMDb Fetch Error:", e);
         return null;
@@ -184,7 +185,8 @@ export async function syncOmdbData(onProgress?: (msg: string) => Promise<void>) 
 
         if (data) {
             // Parse Ratings
-            const rt = data.Ratings.find(r => r.Source === 'Rotten Tomatoes')?.Value;
+            const rtString = data.Ratings.find(r => r.Source === 'Rotten Tomatoes')?.Value;
+            const rt = rtString ? parseInt(rtString.replace('%', '')) : null;
 
             await db.mediaMetadata.create({
                 data: {
@@ -192,8 +194,8 @@ export async function syncOmdbData(onProgress?: (msg: string) => Promise<void>) 
                     title: item.title,
                     type: item.type,
                     imdbId: data.imdbID !== 'N/A' ? data.imdbID : null,
-                    imdbRating: data.imdbRating !== 'N/A' ? data.imdbRating : null,
-                    rottenTomatoes: rt || null,
+                    ratingImdb: data.imdbRating !== 'N/A' ? parseFloat(data.imdbRating) : null, // Fix field name
+                    ratingRtCritic: rt, // Fixed field name and type
                     poster: data.Poster !== 'N/A' ? data.Poster : null,
                     omdbResponse: JSON.stringify(data)
                 }
