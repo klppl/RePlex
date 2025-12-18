@@ -56,6 +56,33 @@ export async function getAdminUsers(): Promise<AdminUserType[]> {
 
 
 
+// Re-download history for specific user and regen stats
+export async function refreshUser(userId: number) {
+    try {
+        const session = await verifyAdminSession();
+        if (!session) throw new Error("Unauthorized");
+
+        const year = new Date().getFullYear();
+        const from = new Date(year, 0, 1);
+        const to = new Date(); // Now
+
+        console.log(`[ADMIN] Refreshing user ${userId}: Force syncing history from Tautulli (${year})...`);
+
+        // Force download history
+        await syncHistoryForUser(userId, from, to, true);
+
+        // Generate stats
+        console.log(`[ADMIN] User ${userId} history synced. Regenerating stats...`);
+        await getStats(userId, undefined, undefined, undefined, { forceRefresh: true });
+
+        revalidatePath('/admin');
+        return { success: true };
+    } catch (error: any) {
+        console.error(`Failed to refresh user ${userId}:`, error);
+        return { success: false, error: error.message };
+    }
+}
+
 export async function generateUserStats(userId: number) {
     try {
         const session = await verifyAdminSession();

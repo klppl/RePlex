@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { AdminUserType, purgeAllData, syncAllUsersHistory, saveSystemConfig, deleteUserReport, generateUserStats, generateAllStats, generateLoginLink } from "@/lib/actions/admin";
+import { AdminUserType, purgeAllData, syncAllUsersHistory, saveSystemConfig, deleteUserReport, generateUserStats, generateAllStats, generateLoginLink, refreshUser } from "@/lib/actions/admin";
 import { formatDistanceToNow } from 'date-fns';
 
 type AdminView = 'users' | 'settings' | 'setup' | 'login';
@@ -42,6 +42,24 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
     const [generatingId, setGeneratingId] = useState<number | null>(null);
     const [isGeneratingAll, setIsGeneratingAll] = useState(false);
 
+    // First Run State
+    const [isFirstRunDismissed, setIsFirstRunDismissed] = useState<boolean>(true); // Default to true to prevent flash
+
+    useEffect(() => {
+        // Check local storage on mount
+        const dismissed = localStorage.getItem('replex_first_run_dismissed');
+        if (!dismissed) {
+            setIsFirstRunDismissed(false);
+        }
+    }, []);
+
+    const handleDismissFirstRun = (forever: boolean) => {
+        setIsFirstRunDismissed(true);
+        if (forever) {
+            localStorage.setItem('replex_first_run_dismissed', 'true');
+        }
+    };
+
     // Purge State
     const [isPurging, setIsPurging] = useState(false);
     const [confirmPurge, setConfirmPurge] = useState(false);
@@ -71,9 +89,9 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
         setDeletingId(null);
     };
 
-    const handleGenerateUser = async (id: number) => {
+    const handleRefreshUser = async (id: number) => {
         setGeneratingId(id);
-        const res = await generateUserStats(id);
+        const res = await refreshUser(id);
         if (res.success) {
             router.refresh();
         } else {
@@ -165,16 +183,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
         }
     };
 
-    const handleGenerateLink = async (id: number) => {
-        const res = await generateLoginLink(id);
-        if (res.success && res.token) {
-            const url = `${window.location.origin}/login?token=${res.token}`;
-            await navigator.clipboard.writeText(url);
-            alert("Login link generated and copied to clipboard!");
-        } else {
-            alert("Failed to generate link: " + res.error);
-        }
-    };
+
 
 
 
@@ -342,6 +351,55 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
 
     const renderUsers = () => (
         <div className="space-y-6 animate-in fade-in duration-300">
+
+            {/* First Run Notice */}
+            {!isFirstRunDismissed && (
+                <div className="bg-yellow-500/10 border border-yellow-500/30 p-6 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 animate-in slide-in-from-top-4 duration-500">
+                    <div className="flex gap-4">
+                        <span className="text-3xl">👋</span>
+                        <div className="space-y-1">
+                            <h3 className="text-yellow-400 font-bold text-lg">Welcome to RePlex!</h3>
+                            <p className="text-yellow-200/70 text-sm max-w-xl leading-relaxed">
+                                This looks like your first run. It is recommended to force a full history download from Tautulli once to populate your database.
+                                <br />
+                                Depending on your server size, this can take a while. Please check the terminal logs for progress.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                        <button
+                            onClick={handleDownloadData}
+                            disabled={isStreaming}
+                            className={`px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-yellow-900/20 transition flex items-center justify-center gap-2 ${isStreaming ? 'bg-yellow-600/50 cursor-not-allowed text-white/50' : 'bg-yellow-500 hover:bg-yellow-400 text-slate-900'}`}
+                        >
+                            {isStreaming ? (
+                                <>
+                                    <span className="w-4 h-4 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin" />
+                                    Syncing...
+                                </>
+                            ) : (
+                                <>🚀 Sync All Data</>
+                            )}
+                        </button>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => handleDismissFirstRun(false)}
+                                className="px-4 py-2 bg-yellow-500/5 hover:bg-yellow-500/10 text-yellow-400/80 hover:text-yellow-300 rounded-xl text-sm font-medium transition"
+                            >
+                                Dismiss
+                            </button>
+                            <button
+                                onClick={() => handleDismissFirstRun(true)}
+                                className="px-4 py-2 bg-yellow-500/5 hover:bg-yellow-500/10 text-yellow-400/80 hover:text-yellow-300 rounded-xl text-sm font-medium transition"
+                                title="Don't show this again"
+                            >
+                                Remove Forever
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold text-white flex items-center gap-3">
                     <span className="bg-blue-500/10 text-blue-400 p-2 rounded-lg">👥</span>
@@ -354,7 +412,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                         className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${isStreaming ? 'bg-blue-600/50 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
                         title="Download history and metadata"
                     >
-                        {isStreaming ? 'Downloading...' : '⬇️ Download Data'}
+                        {isStreaming ? 'Downloading...' : '⬇️ Sync All Data'}
                     </button>
                     {users.length > 0 && (
                         <button
@@ -424,39 +482,28 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                             </div>
 
                             <div className="flex items-center gap-3 w-full md:w-auto">
-                                <button
-                                    onClick={() => handleGenerateLink(user.id)}
-                                    className="flex-1 md:flex-none px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded-lg text-sm font-bold transition"
-                                    title="Generate Login Link"
-                                >
-                                    🔑 Link
-                                </button>
-                                <button
-                                    onClick={() => handleGenerateUser(user.id)}
-                                    disabled={generatingId === user.id}
-                                    className="flex-1 md:flex-none px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/50 rounded-lg text-sm font-bold transition disabled:opacity-50"
-                                    title="Regenerate Stats Cache"
-                                >
-                                    {generatingId === user.id ? '...' : '↻ Gen'}
-                                </button>
 
+
+
+                                <button
+                                    onClick={() => user.statsGeneratedAt ? handleDeleteReport(user.id) : handleRefreshUser(user.id)}
+                                    disabled={generatingId === user.id || deletingId === user.id}
+                                    className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-sm font-bold transition disabled:opacity-50 disabled:cursor-not-allowed ${user.statsGeneratedAt
+                                        ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/50'
+                                        : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
+                                        }`}
+                                >
+                                    {deletingId === user.id || generatingId === user.id ? '...' : (user.statsGeneratedAt ? 'Delete' : 'Generate')}
+                                </button>
                                 <button
                                     onClick={() => {
                                         const url = `${window.location.origin}/dashboard?userId=${user.id}`;
                                         navigator.clipboard.writeText(url);
-                                        alert("Link copied to clipboard!");
                                     }}
                                     className="flex-1 md:flex-none px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700/50 rounded-lg text-sm transition"
                                     title="Copy Shareable Link"
                                 >
                                     🔗
-                                </button>
-                                <button
-                                    onClick={() => handleDeleteReport(user.id)}
-                                    disabled={!user.statsGeneratedAt || deletingId === user.id}
-                                    className="flex-1 md:flex-none px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/50 rounded-lg text-sm font-bold transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {deletingId === user.id ? '...' : (user.statsGeneratedAt ? 'Del Rep' : 'No Rep')}
                                 </button>
                             </div>
                         </div>
@@ -658,8 +705,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                 onClick={() => setIsTerminalContentVisible(!isTerminalContentVisible)}
             >
                 <span className="text-gray-400 flex items-center gap-2 font-bold tracking-widest uppercase">
-                    <span className={`w-2 h-2 rounded-full ${isStreaming ? 'bg-green-500 animate-pulse' : 'bg-red-900'}`}></span>
-                    SYSTEM_ENTROPY
+                    SYSTEM LOGS
                 </span>
                 <div className="flex items-center gap-4">
                     <span className="text-[10px] text-gray-600 uppercase tracking-widest">{isTerminalContentVisible ? 'COLLAPSE' : 'EXPAND'}</span>
