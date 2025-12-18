@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { AdminUserType, purgeAllData, syncAllUsersHistory, saveSystemConfig, deleteUserReport, generateUserStats, generateAllStats, generateLoginLink, refreshUser } from "@/lib/actions/admin";
+import { AdminUserType, purgeAllData, syncAllUsersHistory, saveSystemConfig, deleteUserReport, generateUserStats, generateAllStats, generateLoginLink, refreshUser, dismissFirstRun } from "@/lib/actions/admin";
 import { formatDistanceToNow } from 'date-fns';
 
 type AdminView = 'users' | 'settings' | 'setup' | 'login';
@@ -15,7 +15,8 @@ interface Props {
         config: any;
         aiConfig: any;
         mediaConfig: any;
-    } | null;
+        isFirstRunDismissed?: boolean;
+    };
     isAuthenticated: boolean;
 }
 
@@ -24,7 +25,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
 
     // View State
     const [view, setView] = useState<AdminView>(
-        !status.initialized ? 'setup' :
+        !status?.initialized ? 'setup' :
             (!isAuthenticated ? 'login' : 'users')
     );
     const [users, setUsers] = useState(initialUsers);
@@ -43,19 +44,27 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
     const [isGeneratingAll, setIsGeneratingAll] = useState(false);
 
     // First Run State
-    const [isFirstRunDismissed, setIsFirstRunDismissed] = useState<boolean>(true); // Default to true to prevent flash
+    // If specifically in DB as dismissed (true), hide it. Otherwise default to false (show it).
+    // BUT we also check local storage for temporary session dismissal?
+    // User requested "save the 'remove forever' in the database".
+    // So if DB says true, we hide.
+    const [isFirstRunDismissed, setIsFirstRunDismissed] = useState<boolean>(status?.isFirstRunDismissed || false);
 
     useEffect(() => {
-        // Check local storage on mount
-        const dismissed = localStorage.getItem('replex_first_run_dismissed');
-        if (!dismissed) {
-            setIsFirstRunDismissed(false);
+        // Check local storage on mount (LEGACY/SESSION ONLY)
+        // If DB says false (show it), we can still validly check if user dismissed it locally for this session
+        if (!status?.isFirstRunDismissed) {
+            const dismissed = localStorage.getItem('replex_first_run_dismissed');
+            if (dismissed) setIsFirstRunDismissed(true);
         }
-    }, []);
+    }, [status?.isFirstRunDismissed]);
 
-    const handleDismissFirstRun = (forever: boolean) => {
+    const handleDismissFirstRun = async (forever: boolean) => {
         setIsFirstRunDismissed(true);
         if (forever) {
+            await dismissFirstRun();
+        } else {
+            // Session only
             localStorage.setItem('replex_first_run_dismissed', 'true');
         }
     };

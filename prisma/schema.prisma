@@ -39,6 +39,7 @@ model AdminUser {
   id           Int    @id @default(autoincrement())
   username     String @unique
   passwordHash String
+  isFirstRunDismissed Boolean @default(false)
 }
 
 model User {

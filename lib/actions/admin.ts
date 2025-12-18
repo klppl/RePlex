@@ -260,6 +260,11 @@ export async function getSystemStatus() {
         const aiConfig = await db.aiConfig.findFirst();
         const mediaConfig = await db.mediaConfig.findFirst();
 
+        // Get admin user specific preferences
+        const adminUser = await db.adminUser.findFirst({
+            where: { username: session.username as string }
+        });
+
         return {
             initialized,
             hasAdmin,
@@ -270,10 +275,11 @@ export async function getSystemStatus() {
                 tmdbApiKey: mediaConfig.tmdbApiKey ? MASK : null,
                 tvdbApiKey: mediaConfig.tvdbApiKey ? MASK : null,
                 omdbApiKey: mediaConfig.omdbApiKey ? MASK : null
-            } : null
+            } : null,
+            isFirstRunDismissed: adminUser?.isFirstRunDismissed || false
         };
     } catch (error) {
-        return { initialized: false, hasAdmin: false, config: null, aiConfig: null, mediaConfig: null };
+        return { initialized: false, hasAdmin: false, config: null, aiConfig: null, mediaConfig: null, isFirstRunDismissed: false };
     }
 }
 
@@ -414,5 +420,23 @@ export async function syncAllUsersHistory() {
     } catch (error: any) {
         console.error("Global Sync failed:", error);
         return { success: false, error: error.message || "Global Sync failed" };
+    }
+}
+
+export async function dismissFirstRun() {
+    try {
+        const session = await verifyAdminSession();
+        if (!session) throw new Error("Unauthorized");
+
+        // We assume single admin or update the current one
+        await db.adminUser.update({
+            where: { username: session.username as string },
+            data: { isFirstRunDismissed: true }
+        });
+
+        revalidatePath('/admin');
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: "Failed to update preference of first run" };
     }
 }
