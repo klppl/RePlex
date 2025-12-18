@@ -1,10 +1,14 @@
 # RePlex
 
-> [!CAUTION]
-> **VIBE CODED PROJECT — HOST AT YOUR OWN RISK**  
-> This project is 100% "vibe coded" (rapidly experimented/generated). It has **NOT** been audited for security.  
-> **DO NOT HOST THIS ON THE PUBLIC INTERNET.**  
-> It is intended strictly for internal/private network use. If you expose this to the web, you are effectively letting strangers into your house. You have been warned.
+> [!WARNING]
+> **Experimental Project (AI-Assisted/Vibe Coded)**
+> This is a hobby project developed with heavy AI assistance. It has not undergone security auditing.
+>
+> **Deployment**: Recommended for local/home networks only.
+>
+> **Risk**: Avoid exposing the dashboard directly to the public internet without a reverse proxy or VPN.
+>
+> **Disclaimer**: Use at your own risk. I am not responsible for any data loss or unauthorized access.
 
 ## Technical Overview
 RePlex generates a "Spotify Wrapped" style year-in-review for Plex users by aggregating playback data from Tautulli.
@@ -17,8 +21,9 @@ RePlex generates a "Spotify Wrapped" style year-in-review for Plex users by aggr
 - **Styling**: Tailwind CSS & Framer Motion.
 
 ### Core Features
-- **Admin Dashboard**: (`/admin`) manage users, sync Tautulli history, and trigger report generation.
-- **User Dashboard**: (`/dashboard?userId=X`) public-facing (internal) view for users to explore their stats.
+- **Sign in with Plex**: Secure OAuth flow. Users log in with their Plex credentials.
+- **Admin Dashboard**: (`/admin`) Manage users, sync Tautulli history, and trigger report generation.
+- **User Dashboard**: (`/dashboard`) Interactive "Year in Review" stats.
 - **AI Summaries**:  Generates a "brutally honest" personality roast based on watch history.
 - **Caching**: Heavy Tautulli queries are cached in SQLite for instant dashboard loading.
 
@@ -29,10 +34,9 @@ If you can't fix it, at least post an Issue with details. We appreciate contribu
 ## Running with Docker
 
 1. Ensure you have Docker and Docker Compose installed.
-2. Copy `.env.example` to `.env`: `cp .env.example .env`
-3. Run `docker compose up --build`.
-4. The application will be available at `http://localhost:3000`.
-5. The database is persisted in the `./prisma` directory.
+2. Run `docker compose up --build`.
+3. The application will be available at `http://localhost:3000`.
+4. The database is persisted in the `./prisma` directory.
 
 ### Setup (Local Dev)
 1. Clone repo & `npm install`
@@ -45,14 +49,3 @@ If you can't fix it, at least post an Issue with details. We appreciate contribu
 <a href="screenshot.png">
   <img src="screenshot.png" style="width: 100%; max-width: 800px; border-radius: 10px; border: 1px solid #333;" alt="RePlex Dashboard Preview">
 </a>
-
-## Future Roadmap / TODO
-
-The project is functional but has plenty of room to grow. Here is what is on the radar:
-
-- [ ] **Compare with other users (in the works)**: See how your stats stack up against the server average or specific friends.
-- [ ] **Year Selection**: Currently defaults to the current year. Add ability to generate reports for previous years.
-- [ ] **Background Jobs**: "Sync All Data" can be slow for large servers. Move this to a background queue (e.g., BullMQ) to avoid timeouts.
-- [ ] **Public/Private Toggle**: Secure user dashboards with unique tokens or magic links instead of simple IDs to prevent enumeration.
-- [ ] **Localization**: Support matching the dashboard language to the user's Plex/Tautulli language settings.
-- [ ] **Testing**: Add unit and integration tests to ensure stability during refactors.
