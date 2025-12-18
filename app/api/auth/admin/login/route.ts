@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { verifyPassword, createAdminSession } from '@/lib/auth-admin';
+import { syncUsers } from '@/lib/services/tautulli';
 
 export async function POST(request: Request) {
     try {
@@ -18,6 +19,15 @@ export async function POST(request: Request) {
         }
 
         await createAdminSession(username);
+
+        // Auto-sync users on login
+        try {
+            console.log("Admin logged in. Syncing users...");
+            await syncUsers();
+        } catch (e) {
+            console.error("Auto-sync failed:", e);
+            // Non-fatal, proceed with login
+        }
 
         return NextResponse.json({ success: true });
     } catch (error: any) {

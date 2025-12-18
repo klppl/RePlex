@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { AdminUserType, purgeAllData, syncTautulliUsers, syncAllUsersHistory, saveSystemConfig, deleteUserReport, generateUserStats, generateAllStats, generateLoginLink } from "@/lib/actions/admin";
+import { AdminUserType, purgeAllData, syncAllUsersHistory, saveSystemConfig, deleteUserReport, generateUserStats, generateAllStats, generateLoginLink } from "@/lib/actions/admin";
 import { formatDistanceToNow } from 'date-fns';
 
 type AdminView = 'users' | 'settings' | 'setup' | 'login';
@@ -33,8 +33,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
         setUsers(initialUsers);
     }, [initialUsers]);
 
-    // Sync State
-    const [isSyncing, setIsSyncing] = useState(false);
+
 
     // Deletion State
     const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -57,17 +56,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
 
     // --- HANDLERS ---
 
-    const handleSync = async () => {
-        setIsSyncing(true);
-        const res = await syncTautulliUsers();
-        if (res.success) {
-            alert(`Synced ${res.count} users from Tautulli!`);
-            router.refresh();
-        } else {
-            alert("Sync failed: " + res.error);
-        }
-        setIsSyncing(false);
-    };
+
 
     const handleDeleteReport = async (id: number) => {
         if (!confirm("Are you sure you want to delete the generated report? The user and their history will remain.")) return;
@@ -193,7 +182,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
     // Terminal / Streaming State
     const [isStreaming, setIsStreaming] = useState(false);
     const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
-    const [isTerminalContentVisible, setIsTerminalContentVisible] = useState(true);
+    const [isTerminalContentVisible, setIsTerminalContentVisible] = useState(false);
     const terminalRef = useRef<HTMLDivElement>(null);
 
     // Auto-scroll terminal
@@ -323,48 +312,20 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                 </p>
             </div>
             {view !== 'setup' && view !== 'login' && (
-                <div className="flex gap-3">
+                <div className="flex gap-3 items-center">
                     <button
-                        onClick={handleSync}
-                        disabled={isSyncing || isGeneratingAll}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${isSyncing ? 'bg-indigo-600/50 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
-                        title="Fetch user list from Tautulli"
+                        onClick={() => setView('users')}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition ${view === 'users' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
                     >
-                        {isSyncing ? 'Syncing List...' : '🔄 Sync List'}
+                        User Management
                     </button>
-
-
                     <button
-                        onClick={handleDownloadData}
-                        disabled={isStreaming}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${isStreaming ? 'bg-blue-600/50 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
-                        title="Download history and metadata"
+                        onClick={() => setView('settings')}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition ${view === 'settings' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
                     >
-                        {isStreaming ? 'Downloading...' : '⬇️ Download Data'}
+                        Settings
                     </button>
-                    {view === 'users' && users.length > 0 && (
-                        <button
-                            onClick={handleGenerateAll}
-                            disabled={isGeneratingAll}
-                            className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${isGeneratingAll ? 'bg-amber-600/50 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-500 text-white'}`}
-                        >
-                            {isGeneratingAll ? (
-                                <>
-                                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    Generating...
-                                </>
-                            ) : (
-                                <>⚡ Generate Downloaded</>
-                            )}
-                        </button>
-                    )}
-                    <button
-                        onClick={() => router.push('/')}
-                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm font-medium transition"
-                        title="Go to public login page"
-                    >
-                        Exit to App
-                    </button>
+                    <div className="w-px h-6 bg-slate-800 mx-2"></div>
                     <button
                         onClick={handleLogout}
                         className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 rounded-lg text-sm font-bold transition"
@@ -377,32 +338,42 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
         </div>
     );
 
-    const renderNav = () => {
-        if (view === 'setup' || view === 'login') return null;
-        return (
-            <div className="flex gap-4 border-b border-slate-800/50 pb-1">
-                <button
-                    onClick={() => setView('users')}
-                    className={`px-4 py-3 text-sm font-bold border-b-2 transition ${view === 'users' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
-                >
-                    User Management
-                </button>
-                <button
-                    onClick={() => setView('settings')}
-                    className={`px-4 py-3 text-sm font-bold border-b-2 transition ${view === 'settings' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
-                >
-                    Settings
-                </button>
-            </div>
-        );
-    };
+
 
     const renderUsers = () => (
         <div className="space-y-6 animate-in fade-in duration-300">
-            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                <span className="bg-blue-500/10 text-blue-400 p-2 rounded-lg">👥</span>
-                User Management
-            </h2>
+            <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                    <span className="bg-blue-500/10 text-blue-400 p-2 rounded-lg">👥</span>
+                    User Management
+                </h2>
+                <div className="flex gap-3">
+                    <button
+                        onClick={handleDownloadData}
+                        disabled={isStreaming}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${isStreaming ? 'bg-blue-600/50 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+                        title="Download history and metadata"
+                    >
+                        {isStreaming ? 'Downloading...' : '⬇️ Download Data'}
+                    </button>
+                    {users.length > 0 && (
+                        <button
+                            onClick={handleGenerateAll}
+                            disabled={isGeneratingAll}
+                            className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${isGeneratingAll ? 'bg-amber-600/50 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-500 text-white'}`}
+                        >
+                            {isGeneratingAll ? (
+                                <>
+                                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    Generating...
+                                </>
+                            ) : (
+                                <>⚡ Generate All</>
+                            )}
+                        </button>
+                    )}
+                </div>
+            </div>
             <div className="grid gap-4">
                 {users.length === 0 ? (
                     <div className="p-8 text-center text-slate-500 bg-slate-900/50 rounded-2xl border border-slate-800 border-dashed">
@@ -730,7 +701,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                     onClick={handleDownloadData}
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs tracking-wider flex items-center gap-2"
                 >
-                    ▶ RESUME DOWNLOAD
+                    ▶ START
                 </button>
             ) : (
                 <button
@@ -757,10 +728,10 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                 {view !== 'login' && view !== 'setup' && (
                     <>
                         {renderTerminal()}
-                        {renderTerminalControls()}
+                        {isTerminalContentVisible && renderTerminalControls()}
                     </>
                 )}
-                {renderNav()}
+
 
                 {view === 'users' && renderUsers()}
                 {view === 'login' && renderLogin()}

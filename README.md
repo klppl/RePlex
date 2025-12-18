@@ -29,15 +29,17 @@ If you can't fix it, at least post an Issue with details. We appreciate contribu
 ## Running with Docker
 
 1. Ensure you have Docker and Docker Compose installed.
-2. Run `docker compose up --build`.
-3. The application will be available at `http://localhost:3000`.
-4. The database is persisted in the `./prisma` directory.
+2. Copy `.env.example` to `.env`: `cp .env.example .env`
+3. Run `docker compose up --build`.
+4. The application will be available at `http://localhost:3000`.
+5. The database is persisted in the `./prisma` directory.
 
 ### Setup (Local Dev)
 1. Clone repo & `npm install`
-2. `npx prisma db push`
-3. `npm run dev`
-4. Visit `/admin` to configure your Tautulli connection and generate admin credentials.
+2. Copy `.env.example` to `.env`: `cp .env.example .env`
+3. `npx prisma db push`
+4. `npm run dev`
+5. Visit `/admin` to configure your Tautulli connection and generate admin credentials.
 
 ## Preview
 <a href="screenshot.png">
