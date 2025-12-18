@@ -8,21 +8,27 @@ import { Router } from 'lucide-react';
 import { StatsResult } from '@/lib/services/stats';
 
 interface DashboardClientProps {
-    initialStats: StatsResult;
+    initialStats: StatsResult | null;
     userId: number;
     year: number;
+    shouldGenerate?: boolean;
 }
 
-export default function DashboardClient({ initialStats, userId, year }: DashboardClientProps) {
+export default function DashboardClient({ initialStats, userId, year, shouldGenerate = false }: DashboardClientProps) {
     const router = useRouter();
-    // Treat null/undefined totalSeconds as 0
-    // Treat null/undefined totalSeconds as 0
-    const hasData = (initialStats.totalSeconds || 0) > 0;
 
-    // IF no data, immediately show No Data screen.
+    // State
+    const [stats, setStats] = useState<StatsResult | null>(initialStats);
+    const [isGenerating, setIsGenerating] = useState(shouldGenerate);
+
+    // Treat null/undefined totalSeconds as 0 if stats exist
+    const currentSeconds = stats?.totalSeconds || 0;
+    const hasData = currentSeconds > 0;
+
+    // IF no data AND not generating, immediately show No Data screen.
     // We do NOT auto-sync. Admin handles sync.
-    const [noDataFound, setNoDataFound] = useState(!hasData);
-    const [stats, setStats] = useState(initialStats);
+    const [noDataFound, setNoDataFound] = useState(!hasData && !shouldGenerate);
+
     const [synced, setSynced] = useState(false);
     const [logs, setLogs] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
@@ -32,11 +38,16 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
     const [loadingAi, setLoadingAi] = useState(false);
     const [uploadDots, setUploadDots] = useState("");
 
-    const logBuffer = useRef<string[]>((!hasData)
-        ? ["Error: No data found.", "Yet.", "The power of yet."]
-        : []);
+    const logBuffer = useRef<string[]>((isGenerating)
+        ? ["Initializing RePlex Protocol...", "Connecting to Neural Net...", "Loading Personality Matrix..."]
+        : (!hasData)
+            ? ["Initializing RePlex Protocol...", "Connecting to Neural Net...", "Loading Personality Matrix..."]
+            : []);
+
     const isSyncActive = useRef(false);
     const quotesShown = useRef(0);
+    const [redirecting, setRedirecting] = useState(false);
+    const [redirectDots, setRedirectDots] = useState("");
 
     const FUNNY_QUOTES = [
         "Dont Netflix and Chill. Plex and sex.",
@@ -71,58 +82,58 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
         "Yes, you watched the same actor again."
     ];
 
-    /* 
-    // Auto-sync effect - DISABLED per requirements. Admin manages sync.
+    // Fun Loading Sequence for No Data
     useEffect(() => {
-        const controller = new AbortController();
-        let timeoutId: NodeJS.Timeout;
+        if (!noDataFound) return;
 
-        const currentSeconds = stats.totalSeconds || 0;
-        const currentHasSynced = stats.hasSynced;
+        let isMounted = true;
+        const sequence = async () => {
+            // Wait for initial logs to drain
+            await new Promise(r => setTimeout(r, 2000));
+            if (!isMounted) return;
 
-        // Only auto-sync if we have NO data AND we haven't synced before (backend check) AND haven't synced this session
-        // AND we are not already in noDataFound state
-        if (currentSeconds === 0 && !currentHasSynced && !synced && !loading && !noDataFound) {
-            // Debounce sync
-            timeoutId = setTimeout(() => {
-                console.log("Auto-sync triggering...", { currentSeconds, currentHasSynced, synced, loading, noDataFound });
-                performSync(false, controller.signal);
-            }, 500);
-        } else {
-             console.log("Skipping auto-sync:", { currentSeconds, currentHasSynced, synced, loading, noDataFound });
-        }
-
-        return () => {
-            clearTimeout(timeoutId);
-            controller.abort();
-        };
-    }, [stats.totalSeconds, stats.hasSynced, synced, noDataFound]);
-    */
-
-    const [redirecting, setRedirecting] = useState(false);
-    const [redirectDots, setRedirectDots] = useState("");
-
-    // Redirect effect for No Data
-    useEffect(() => {
-        if (noDataFound) {
-            // Start redirect animation after a moment
-            const startAnimTimer = setTimeout(() => setRedirecting(true), 2000);
-
-            // Actual redirect
-            const timeout = setTimeout(async () => {
-                try {
-                    await fetch('/api/auth/logout', { method: 'POST' });
-                    window.location.href = '/';
-                } catch (e) {
-                    window.location.href = '/';
-                }
-            }, 7000); // 7s total
-
-            return () => {
-                clearTimeout(startAnimTimer);
-                clearTimeout(timeout);
+            // Show some funny quotes
+            const quotesToShow = 3;
+            for (let i = 0; i < quotesToShow; i++) {
+                const randomQuote = FUNNY_QUOTES[Math.floor(Math.random() * FUNNY_QUOTES.length)];
+                logBuffer.current.push(`> ${randomQuote}`);
+                await new Promise(r => setTimeout(r, 2500)); // Read time
+                if (!isMounted) return;
             }
-        }
+
+            // Realization
+            logBuffer.current.push("Analyzing watch history...");
+            await new Promise(r => setTimeout(r, 2000));
+            if (!isMounted) return;
+
+            logBuffer.current.push("Wait...");
+            await new Promise(r => setTimeout(r, 1000));
+            if (!isMounted) return;
+
+            logBuffer.current.push("Error: No data found.");
+            await new Promise(r => setTimeout(r, 1500));
+            if (!isMounted) return;
+
+            // logBuffer.current.push("Yet.");
+            // await new Promise(r => setTimeout(r, 1000));
+            // if (!isMounted) return;
+
+            logBuffer.current.push("Ask your Admin to sync your data.");
+            await new Promise(r => setTimeout(r, 2000));
+            if (!isMounted) return;
+
+            // Start Redirect
+            setRedirecting(true);
+            logBuffer.current.push("Redirecting to login...");
+
+            setTimeout(() => {
+                if (isMounted) window.location.href = '/';
+            }, 3000);
+        };
+
+        sequence();
+
+        return () => { isMounted = false; };
     }, [noDataFound]);
 
     // Animate dots for redirect
@@ -312,8 +323,73 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
         performSync(true);
     };
 
-    // Show loader if explicitly loading, OR if we are in the auto-sync state (empty stats, not synced yet), OR if No Data Found
-    if (loading || (stats.totalSeconds === 0 && !synced) || noDataFound) {
+    // Generation Effect
+    useEffect(() => {
+        if (!isGenerating) return;
+
+        const controller = new AbortController();
+        let isMounted = true;
+
+        const runGeneration = async () => {
+            try {
+                // Start pumping fun messages
+                const quotesInterval = setInterval(() => {
+                    if (!isMounted) return;
+                    const randomQuote = FUNNY_QUOTES[Math.floor(Math.random() * FUNNY_QUOTES.length)];
+                    logBuffer.current.push(`> ${randomQuote}`);
+                }, 3000);
+
+                // Fetch stats
+                const res = await fetch(`/api/stats?userId=${userId}&year=${year}&refresh=true`, {
+                    signal: controller.signal
+                });
+
+                if (!res.ok) throw new Error("Stats generation failed");
+
+                const newStats = await res.json();
+
+                if (!isMounted) {
+                    clearInterval(quotesInterval);
+                    return;
+                }
+
+                clearInterval(quotesInterval);
+
+                // Transition
+                logBuffer.current.push(">> Analysis Complete.");
+                logBuffer.current.push(">> Rendering Dashboard...");
+
+                await new Promise(r => setTimeout(r, 1000));
+
+                if (isMounted) {
+                    setStats(newStats);
+                    setIsGenerating(false);
+
+                    if ((newStats.totalSeconds || 0) === 0) {
+                        setNoDataFound(true);
+                    }
+                }
+
+            } catch (e: any) {
+                if (e.name === 'AbortError') return;
+                console.error("Generation error", e);
+                if (isMounted) {
+                    logBuffer.current.push(`!! Error: ${e.message}`);
+                    // Maybe setNoDataFound(true) after delay?
+                }
+            }
+        };
+
+        runGeneration();
+
+        return () => {
+            isMounted = false;
+            controller.abort();
+        };
+    }, [isGenerating, userId, year]);
+
+    // Show loader if explicitly loading, OR if we are in the auto-sync state (empty stats, not synced yet), OR if No Data Found, OR if Generating
+    if (loading || (!stats) || (stats.totalSeconds === 0 && !synced) || noDataFound || isGenerating) {
         return (
             <div className="min-h-screen bg-[#111] flex flex-col items-center justify-center p-4">
                 {/* CRT Monitor Case */}
@@ -347,7 +423,7 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                              `}</style>
                             <div className="mb-6 text-center opacity-70 uppercase tracking-[0.2em] text-[10px] pb-4 border-b border-green-900/30 flex justify-center items-center gap-2">
                                 <div className="w-2 h-2 bg-green-500 rounded-full animate-ping"></div>
-                                RePlex OS v1.0 // Sync Protocol
+                                RePlex OS v1.0 // {isGenerating ? "Data Analysis Protocol" : "Sync Protocol"}
                             </div>
 
                             {logs.map((log, i) => (
@@ -370,18 +446,19 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                                 </div>
                             )}
 
-                            {!noDataFound && <div className="text-green-500/80 animate-pulse mt-1 ml-9">_</div>}
+                            {!noDataFound && !isGenerating && <div className="text-green-500/80 animate-pulse mt-1 ml-9">_</div>}
+                            {isGenerating && <div className="text-green-500/80 animate-pulse mt-1 ml-9">Processing...</div>}
 
                         </div>
 
                         {/* Progress Bar Area (Fixed at bottom of screen) */}
                         <div className="relative z-20 p-6 pt-0">
                             <div className="w-full h-4 border border-green-800/50 bg-black/40 rounded-sm relative overflow-hidden">
-                                <div className="h-full bg-green-500/50 transition-all duration-300 ease-out" style={{ width: `${progress}%` }}></div>
+                                <div className="h-full bg-green-500/50 transition-all duration-300 ease-out" style={{ width: `${isGenerating ? 100 : progress}%` }}></div>
                                 {/* Striped pattern overlay for retro look */}
                                 <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, #000 5px, #000 10px)' }}></div>
                                 <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-green-400 tracking-widest drop-shadow-[0_0_2px_black]">
-                                    {noDataFound ? 'SYSTEM HALTED.' : `SYNCING DATA... ${progress}%`}
+                                    {noDataFound ? 'SYSTEM HALTED.' : isGenerating ? 'ANALYZING NEURAL PATTERNS...' : `SYNCING DATA... ${progress}%`}
                                 </div>
                             </div>
                         </div>
@@ -391,6 +468,8 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
             </div>
         );
     }
+
+    if (!stats) return null; // Satisfy TS for main render
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-emerald-500/30">

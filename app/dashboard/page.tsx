@@ -2,6 +2,7 @@ import { getStats } from '@/lib/services/stats';
 import { StatCard } from '../components/StatCard';
 import { Metadata } from 'next';
 import DashboardClient from './DashboardClient';
+import db from '@/lib/db'; // Import DB to check cache status
 
 export const metadata: Metadata = {
     title: 'Tautulli Wrapped',
@@ -41,9 +42,6 @@ export default async function DashboardPage({
 
     if (!userId) {
         // If not logged in and no param, redirect to login? Or show form?
-        // User requested SSO login. Redirect to home if no user.
-        // Actually home is login page now.
-        // We can just link back to home.
         return (
             <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
                 <div className="text-center">
@@ -54,23 +52,30 @@ export default async function DashboardPage({
         );
     }
 
-    // Fetch Stats directly on server
-    let stats;
+    // Check Cache Status First
+    let initialStats = null;
+    let shouldGenerate = false;
+
     try {
-        stats = await getStats(userId, year);
+        const user = await db.user.findUnique({
+            where: { id: userId },
+            select: { statsCache: true }
+        });
+
+        if (user?.statsCache) {
+            // Fast Path: Cache exists, load it
+            initialStats = await getStats(userId, year);
+        } else {
+            // Slow Path: Needs generation
+            shouldGenerate = true;
+        }
+
     } catch (e) {
-        return (
-            <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 text-white">
-                <div className="bg-red-900/50 p-6 rounded-xl border border-red-500">
-                    <h2 className="text-xl font-bold mb-2">Error Fetching Stats</h2>
-                    <p className="opacity-80">{(e as Error).message}</p>
-                    <a href="/dashboard" className="block mt-4 underline text-sm hover:text-white/80">Try different user</a>
-                </div>
-            </div>
-        );
+        console.error("Failed to check cache or fetch stats", e);
+        // Fallback to error UI handled in Client or here
     }
 
     return (
-        <DashboardClient initialStats={stats} userId={userId} year={year} />
+        <DashboardClient initialStats={initialStats} userId={userId} year={year} shouldGenerate={shouldGenerate} />
     );
 }

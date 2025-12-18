@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/auth-admin';
 import { syncGlobalHistory } from '@/lib/services/sync';
+import { syncUsers } from '@/lib/services/tautulli';
 
 export const runtime = 'nodejs'; // Required for streaming? Or just standard. Nodejs is safer for Prisma.
 
@@ -22,6 +23,10 @@ export async function GET(req: NextRequest) {
                 const endOfYear = new Date(now.getFullYear(), 11, 31);
 
                 controller.enqueue(encoder.encode(`[ADMIN] Starting global sync from ${startOfYear.toDateString()} to ${endOfYear.toDateString()}...\n`));
+
+                controller.enqueue(encoder.encode(`[ADMIN] Phase 0: Syncing Users...\n`));
+                const userCount = await syncUsers();
+                controller.enqueue(encoder.encode(`[ADMIN] User Sync Complete. Found ${userCount} users.\n`));
 
                 const result = await syncGlobalHistory(startOfYear, endOfYear, (msg) => {
                     controller.enqueue(encoder.encode(`[SYNC] ${msg}\n`));

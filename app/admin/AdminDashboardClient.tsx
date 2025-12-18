@@ -91,10 +91,19 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
 
     const handleRefreshUser = async (id: number) => {
         setGeneratingId(id);
+
+        // Open terminal and log start
+        if (!isTerminalContentVisible) setIsTerminalContentVisible(true);
+        const username = users.find(u => u.id === id)?.username || `User ${id}`;
+        setTerminalLogs(prev => [...prev, `[ADMIN] Starting full refresh for ${username}...`, `[ADMIN] Force syncing history from Tautulli (this may take a moment)...`]);
+
         const res = await refreshUser(id);
+
         if (res.success) {
+            setTerminalLogs(prev => [...prev, `[ADMIN] Success! Stats generated for ${username}.`]);
             router.refresh();
         } else {
+            setTerminalLogs(prev => [...prev, `[ERROR] Failed to refresh ${username}: ${res.error}`]);
             alert("Failed: " + res.error);
         }
         setGeneratingId(null);
@@ -516,12 +525,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
     );
 
     const renderSettings = () => (
-        <div className="space-y-6 max-w-2xl mx-auto animate-in fade-in duration-300">
-            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                <span className="bg-slate-500/10 text-slate-400 p-2 rounded-lg">⚙️</span>
-                System Configuration
-            </h2>
-
+        <div className="space-y-6 w-full animate-in fade-in duration-300">
             <form onSubmit={handleConfigSubmit} className="bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-xl space-y-8">
                 {/* Connection Details */}
                 <div className="space-y-6">
@@ -574,10 +578,10 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                         <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">TMDB API Key</label>
                         <input name="tmdbApiKey" type="password" defaultValue={status.mediaConfig?.tmdbApiKey || ''} placeholder="Metric tonnes of metadata..." className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-amber-500 outline-none transition" />
                     </div>
-                    <div className="space-y-2">
+                    {/* <div className="space-y-2">
                         <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">TVDB API Key</label>
                         <input name="tvdbApiKey" type="password" defaultValue={status.mediaConfig?.tvdbApiKey || ''} placeholder="Even more metadata..." className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-amber-500 outline-none transition" />
-                    </div>
+                    </div> */}
                     <div className="space-y-2">
                         <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">OMDb API Key</label>
                         <input name="omdbApiKey" type="password" defaultValue={status.mediaConfig?.omdbApiKey || ''} placeholder="Rotten Tomatoes & Box Office Data..." className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-amber-500 outline-none transition" />
