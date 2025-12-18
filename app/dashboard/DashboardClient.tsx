@@ -15,6 +15,13 @@ interface DashboardClientProps {
 
 export default function DashboardClient({ initialStats, userId, year }: DashboardClientProps) {
     const router = useRouter();
+    // Treat null/undefined totalSeconds as 0
+    // Treat null/undefined totalSeconds as 0
+    const hasData = (initialStats.totalSeconds || 0) > 0;
+
+    // IF no data, immediately show No Data screen.
+    // We do NOT auto-sync. Admin handles sync.
+    const [noDataFound, setNoDataFound] = useState(!hasData);
     const [stats, setStats] = useState(initialStats);
     const [synced, setSynced] = useState(false);
     const [logs, setLogs] = useState<string[]>([]);
@@ -25,7 +32,9 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
     const [loadingAi, setLoadingAi] = useState(false);
     const [uploadDots, setUploadDots] = useState("");
 
-    const logBuffer = useRef<string[]>([]);
+    const logBuffer = useRef<string[]>((!hasData)
+        ? ["Error: No data found.", "Yet.", "The power of yet."]
+        : []);
     const isSyncActive = useRef(false);
     const quotesShown = useRef(0);
 
@@ -62,28 +71,75 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
         "Yes, you watched the same actor again."
     ];
 
-    // Auto-sync effect
+    /* 
+    // Auto-sync effect - DISABLED per requirements. Admin manages sync.
     useEffect(() => {
         const controller = new AbortController();
         let timeoutId: NodeJS.Timeout;
 
-        if (stats.totalSeconds === 0 && !synced && !loading) {
-            // Debounce sync to prevent React Strict Mode double-invocation cancellation crashes
+        const currentSeconds = stats.totalSeconds || 0;
+        const currentHasSynced = stats.hasSynced;
+
+        // Only auto-sync if we have NO data AND we haven't synced before (backend check) AND haven't synced this session
+        // AND we are not already in noDataFound state
+        if (currentSeconds === 0 && !currentHasSynced && !synced && !loading && !noDataFound) {
+            // Debounce sync
             timeoutId = setTimeout(() => {
-                console.log("Auto-sync triggering...");
+                console.log("Auto-sync triggering...", { currentSeconds, currentHasSynced, synced, loading, noDataFound });
                 performSync(false, controller.signal);
             }, 500);
+        } else {
+             console.log("Skipping auto-sync:", { currentSeconds, currentHasSynced, synced, loading, noDataFound });
         }
 
         return () => {
             clearTimeout(timeoutId);
             controller.abort();
         };
-    }, [stats.totalSeconds, synced]); // Removed loading from dep array as performSync handles it
+    }, [stats.totalSeconds, stats.hasSynced, synced, noDataFound]);
+    */
+
+    const [redirecting, setRedirecting] = useState(false);
+    const [redirectDots, setRedirectDots] = useState("");
+
+    // Redirect effect for No Data
+    useEffect(() => {
+        if (noDataFound) {
+            // Start redirect animation after a moment
+            const startAnimTimer = setTimeout(() => setRedirecting(true), 2000);
+
+            // Actual redirect
+            const timeout = setTimeout(async () => {
+                try {
+                    await fetch('/api/auth/logout', { method: 'POST' });
+                    window.location.href = '/';
+                } catch (e) {
+                    window.location.href = '/';
+                }
+            }, 7000); // 7s total
+
+            return () => {
+                clearTimeout(startAnimTimer);
+                clearTimeout(timeout);
+            }
+        }
+    }, [noDataFound]);
+
+    // Animate dots for redirect
+    useEffect(() => {
+        if (!redirecting) return;
+        const interval = setInterval(() => {
+            setRedirectDots(prev => {
+                if (prev.length >= 3) return "";
+                return prev + ".";
+            });
+        }, 500);
+        return () => clearInterval(interval);
+    }, [redirecting]);
 
     // Log draining effect (The "Typewriter" effect)
     useEffect(() => {
-        if (!loading) return;
+        // ... (rest of existing effect)        if (!loading && !noDataFound) return;
         const interval = setInterval(() => {
             if (logBuffer.current.length > 0) {
                 const nextLog = logBuffer.current.shift();
@@ -98,7 +154,7 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
         }, 60);
 
         return () => clearInterval(interval);
-    }, [loading]);
+    }, [loading, noDataFound]);
 
     // Uploading dots animation
     useEffect(() => {
@@ -180,6 +236,28 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                 await new Promise(r => setTimeout(r, 100));
             }
 
+            // Refresh stats to check if we have data
+            const statsRes = await fetch(`/api/stats?userId=${userId}&year=${year}&refresh=true`);
+            const newStats = await statsRes.json();
+
+            // Check for No Data
+            if (newStats.totalSeconds === 0) {
+                logBuffer.current.push("Error: No data found.");
+                // We pause here to let the user read it, but since we are in the async function loop
+                // and the log drainer runs in useEffect, pushing to buffer works.
+                // We need to wait for drainer to show it.
+                await new Promise(r => setTimeout(r, 1500));
+
+                logBuffer.current.push("Yet.");
+                await new Promise(r => setTimeout(r, 1500));
+
+                logBuffer.current.push("The power of yet.");
+
+                setNoDataFound(true);
+                setLoading(false);
+                return; // Stop here, don't do AI stuff
+            }
+
             const AI_LOADING_MESSAGES = [
                 "Escalating to artificial intelligence.",
                 "Feeding the machine your coping mechanisms.",
@@ -198,26 +276,9 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
             const randomMsg = AI_LOADING_MESSAGES[Math.floor(Math.random() * AI_LOADING_MESSAGES.length)];
             logBuffer.current.push(`>> ${randomMsg}`);
 
-            // Artificial delay for "uploading..." effect
-            // We can't blocking-wait here easily while updating state for animation without a separate effect or interval, 
-            // but we can just push updates to the log buffer or use a temp state.
-            // Actually, the log buffer is the typewriter. The user wants "uploading..." below it. 
-            // The log buffer *is* the screen. So let's push "Uploading" then update it?
-            // "And right below it have it say 'uploading...' where the dots are loading"
-
-            // Let's add a special log line that we can animate? 
-            // Or simpler: just push "Uploading" then "Uploading." then "Uploading.." to logBuffer? 
-            // The log buffer auto-scrolls. 
-            // A smoother way: Set a local state 'showUploading' that renders below the logs in the CRT screen.
-
-            // let's add a state for it.
             setLoadingAi(true); // New state to trigger the uploading text in UI
 
             await new Promise(r => setTimeout(r, 3000)); // Wait for "upload"
-
-            // Refresh stats (Force refresh to generate AI summary now that data is present)
-            const statsRes = await fetch(`/api/stats?userId=${userId}&year=${year}&refresh=true`);
-            const newStats = await statsRes.json();
 
             setLoadingAi(false);
 
@@ -238,7 +299,7 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
             isSyncActive.current = false;
             await new Promise(r => setTimeout(r, 3000));
         } finally {
-            if (!signal?.aborted || completedSuccessfully) {
+            if (!signal?.aborted || completedSuccessfully || (stats.totalSeconds === 0)) { // Ensure loading off if we found no data too
                 setLoading(false);
             }
         }
@@ -247,12 +308,12 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
     const handleForceRefresh = () => {
         if (!confirm("Force refresh? This re-downloads all data.")) return;
         setSynced(false);
+        setNoDataFound(false);
         performSync(true);
     };
 
-    // Show loader if explicitly loading OR if we are in the auto-sync state (empty stats, not synced yet)
-    // This prevents the "flash" of the empty dashboard before the auto-sync effect kicks in.
-    if (loading || (stats.totalSeconds === 0 && !synced)) {
+    // Show loader if explicitly loading, OR if we are in the auto-sync state (empty stats, not synced yet), OR if No Data Found
+    if (loading || (stats.totalSeconds === 0 && !synced) || noDataFound) {
         return (
             <div className="min-h-screen bg-[#111] flex flex-col items-center justify-center p-4">
                 {/* CRT Monitor Case */}
@@ -301,7 +362,16 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                                     &gt;&gt; Uploading Data{uploadDots}
                                 </div>
                             )}
-                            <div className="text-green-500/80 animate-pulse mt-1 ml-9">_</div>
+
+                            {redirecting && (
+                                <div className="mb-1 text-sm md:text-base break-words font-medium tracking-wide text-green-400 drop-shadow-[0_0_5px_rgba(34,197,94,0.6)] animate-pulse">
+                                    <span className="opacity-20 mr-4 select-none text-[10px] aligned-top">{(logs.length + 1).toString().padStart(3, '0')}</span>
+                                    Sending you back{redirectDots}
+                                </div>
+                            )}
+
+                            {!noDataFound && <div className="text-green-500/80 animate-pulse mt-1 ml-9">_</div>}
+
                         </div>
 
                         {/* Progress Bar Area (Fixed at bottom of screen) */}
@@ -311,7 +381,7 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                                 {/* Striped pattern overlay for retro look */}
                                 <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, #000 5px, #000 10px)' }}></div>
                                 <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-green-400 tracking-widest drop-shadow-[0_0_2px_black]">
-                                    SYNCING DATA... {progress}%
+                                    {noDataFound ? 'SYSTEM HALTED.' : `SYNCING DATA... ${progress}%`}
                                 </div>
                             </div>
                         </div>
@@ -332,9 +402,6 @@ export default function DashboardClient({ initialStats, userId, year }: Dashboar
                     <span className="ml-2 text-xs text-slate-500 hidden sm:inline">User #{userId}</span>
                 </div>
                 <div className="flex gap-4">
-                    <button onClick={handleForceRefresh} className="text-xs font-semibold uppercase tracking-wider text-orange-400 hover:text-orange-300 transition">
-                        Redownload Data
-                    </button>
                     <button
                         onClick={async () => {
                             try {

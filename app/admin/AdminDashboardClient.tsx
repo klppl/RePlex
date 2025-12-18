@@ -205,39 +205,14 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
 
 
 
-    const handleSyncAll = async () => {
-        if (!confirm("This will trigger a full global sync for the current year. It may take a long time and put load on Tautulli. Continue?")) return;
-        setIsStreaming(true);
-        if (!isTerminalContentVisible) setIsTerminalContentVisible(true);
-        setTerminalLogs(['Initializing global sync protocol...']);
 
-        try {
-            const response = await fetch('/api/admin/sync');
-            const reader = response.body?.getReader();
-            const decoder = new TextDecoder();
-
-            if (!reader) throw new Error("Failed to initialize stream");
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                const chunk = decoder.decode(value, { stream: true });
-                const lines = chunk.split('\n').filter(line => line.trim() !== '');
-                setTerminalLogs(prev => [...prev, ...lines]);
-            }
-        } catch (error: any) {
-            setTerminalLogs(prev => [...prev, `ERROR: ${error.message}`]);
-        } finally {
-            setIsStreaming(false);
-            setTerminalLogs(prev => [...prev, 'Sync process finished.']);
-        }
-    };
     const abortControllerRef = useRef<AbortController | null>(null);
 
-    const handleOmdbSync = async () => {
+    const handleDownloadData = async () => {
+        if (!confirm("This will trigger a full global sync (History + Metadata). Continue?")) return;
+
         setIsStreaming(true);
         if (!isTerminalContentVisible) setIsTerminalContentVisible(true);
-        setTerminalLogs(prev => [...prev, 'Starting Metadata Enrichment...']);
 
         // Abort previous if any
         if (abortControllerRef.current) abortControllerRef.current.abort();
@@ -245,32 +220,51 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
         abortControllerRef.current = controller;
 
         try {
-            const response = await fetch('/api/admin/omdb', {
-                signal: controller.signal
-            });
+            // --- PHASE 1: HISTORY SYNC ---
+            setTerminalLogs(['🔵 [PHASE 1] Initializing global history sync...']);
 
-            if (response.status === 401) {
-                setTerminalLogs(prev => [...prev, 'ERROR: Unauthorized. Please log in.']);
-                return;
-            }
+            const historyRes = await fetch('/api/admin/sync', { signal: controller.signal });
+            if (!historyRes.ok) throw new Error('History sync failed to start');
 
-            const reader = response.body?.getReader();
+            const historyReader = historyRes.body?.getReader();
+            if (!historyReader) throw new Error("Failed to initialize history stream");
+
             const decoder = new TextDecoder();
 
-            if (!reader) throw new Error("Failed to initialize stream");
-
             while (true) {
-                const { done, value } = await reader.read();
+                const { done, value } = await historyReader.read();
                 if (done) break;
                 const chunk = decoder.decode(value, { stream: true });
                 const lines = chunk.split('\n').filter(line => line.trim() !== '');
                 setTerminalLogs(prev => [...prev, ...lines]);
             }
+
+            setTerminalLogs(prev => [...prev, '✅ [PHASE 1] History Sync Complete.', ' ']);
+
+            // --- PHASE 2: METADATA SYNC ---
+            setTerminalLogs(prev => [...prev, '🟠 [PHASE 2] Starting Metadata Enrichment...']);
+
+            const omdbRes = await fetch('/api/admin/omdb', { signal: controller.signal });
+            if (omdbRes.status === 401) throw new Error('Unauthorized. Please log in.');
+
+            const omdbReader = omdbRes.body?.getReader();
+            if (!omdbReader) throw new Error("Failed to initialize metadata stream");
+
+            while (true) {
+                const { done, value } = await omdbReader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n').filter(line => line.trim() !== '');
+                setTerminalLogs(prev => [...prev, ...lines]);
+            }
+
+            setTerminalLogs(prev => [...prev, '✅ [PHASE 2] Metadata Download Complete.', '🎉 ALL DATA DOWNLOADED SUCCESSFULLY.']);
+
         } catch (error: any) {
             if (error.name === 'AbortError') {
                 setTerminalLogs(prev => [...prev, '⏸ PROCESS PAUSED/STOPPED BY USER.']);
             } else {
-                setTerminalLogs(prev => [...prev, `ERROR: ${error.message}`]);
+                setTerminalLogs(prev => [...prev, `❌ ERROR: ${error.message}`]);
             }
         } finally {
             setIsStreaming(false);
@@ -341,20 +335,12 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
 
 
                     <button
-                        onClick={handleSyncAll}
+                        onClick={handleDownloadData}
                         disabled={isStreaming}
                         className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${isStreaming ? 'bg-blue-600/50 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
-                        title="Download history for all users"
+                        title="Download history and metadata"
                     >
-                        {isStreaming ? 'Downloading...' : '⬇️ Download All Data'}
-                    </button>
-                    <button
-                        onClick={handleOmdbSync}
-                        disabled={isStreaming}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${isStreaming ? 'bg-amber-600/50 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-500 text-white'}`}
-                        title="Download OMDb Metadata"
-                    >
-                        {isStreaming ? 'Fetching...' : '🎬 Download Metadata'}
+                        {isStreaming ? 'Downloading...' : '⬇️ Download Data'}
                     </button>
                     {view === 'users' && users.length > 0 && (
                         <button
@@ -375,8 +361,9 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                     <button
                         onClick={() => router.push('/')}
                         className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm font-medium transition"
+                        title="Go to public login page"
                     >
-                        Home
+                        Exit to App
                     </button>
                     <button
                         onClick={handleLogout}
@@ -740,7 +727,7 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
         <div className="flex gap-2 justify-end mt-2">
             {!isStreaming ? (
                 <button
-                    onClick={handleOmdbSync}
+                    onClick={handleDownloadData}
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs tracking-wider flex items-center gap-2"
                 >
                     ▶ RESUME DOWNLOAD

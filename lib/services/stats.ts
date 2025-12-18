@@ -52,6 +52,7 @@ export interface StatsResult {
         lowestShow?: { title: string; score: number; poster?: string | null };
         persona: { title: string; description: string };
     };
+    hasSynced?: boolean;
 }
 
 export async function getStats(userId: number, year?: number, from?: Date, to?: Date, options: { forceRefresh?: boolean } = {}): Promise<StatsResult> {
@@ -478,7 +479,7 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     // Note: If we are here, we are either force refreshing OR we fell through from the cache check because summary was missing.
     // So we can just check if enabled.
 
-    if (aiConfig?.enabled && aiConfig.apiKey && (hasData || options.forceRefresh)) {
+    if (aiConfig?.enabled && aiConfig.apiKey && hasData && (options.forceRefresh || !aiSummary)) {
         console.log("Generating AI Summary...");
         try {
             const OpenAI = require("openai");
@@ -796,6 +797,18 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     }
 
 
+    // Check sync status (Moved to end to capture scope)
+    const syncCount = await db.syncLog.count({
+        where: {
+            userId,
+            date: {
+                gte: startDate,
+                lt: endDate
+            },
+            completed: true
+        }
+    });
+
     const result: StatsResult = {
         totalDuration, totalSeconds, topShows, lazyDay, activityType,
         oldestMovie: oldestMovieRaw ? { title: oldestMovieRaw.title, year: oldestMovieRaw.year! } : undefined,
@@ -820,7 +833,8 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
             highestShow: highestRatedShow,
             lowestShow: lowestRatedShow,
             persona: { title: personaTitle, description: personaDescription }
-        }
+        },
+        hasSynced: syncCount > 0
     };
 
     // Cache the result
