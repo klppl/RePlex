@@ -44,15 +44,15 @@ export async function syncHistoryForUser(
         // Track Progress
         daysProcessed++;
         const currentProgress = Math.round((daysProcessed / totalDays) * 100);
-        if (currentProgress > lastProgress) {
-            if (onProgress) onProgress(`PROGRESS:${currentProgress}`);
+        if (currentProgress >= lastProgress + 10) {
+            if (onProgress) onProgress(`Progress: ${currentProgress}%`);
             lastProgress = currentProgress;
         }
 
         // Group logs by month
         const currentMonthStr = format(currentDate, 'MMMM yyyy');
         if (currentMonthStr !== lastLoggedMonth) {
-            if (onProgress) onProgress(`MONTH_START:${currentMonthStr}`);
+            if (onProgress) onProgress(`Processing ${currentMonthStr}...`);
             lastLoggedMonth = currentMonthStr;
         }
 

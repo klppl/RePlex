@@ -225,6 +225,7 @@ export async function purgeAllData() {
         await db.aiConfig.deleteMany({});
         await db.mediaConfig.deleteMany({});
         await db.adminUser.deleteMany({}); // Removing admin triggers /setup redirect
+        await db.appConfig.deleteMany({});
 
         revalidatePath('/');
         return { success: true };
@@ -252,13 +253,15 @@ export async function getSystemStatus() {
                 hasAdmin,
                 config: null,
                 aiConfig: null,
-                mediaConfig: null
+                mediaConfig: null,
+                appConfig: null
             };
         }
 
         // If authenticated, mask secrets
         const aiConfig = await db.aiConfig.findFirst();
         const mediaConfig = await db.mediaConfig.findFirst();
+        const appConfig = await db.appConfig.findFirst();
 
         // Get admin user specific preferences
         const adminUser = await db.adminUser.findFirst({
@@ -276,10 +279,11 @@ export async function getSystemStatus() {
                 tvdbApiKey: mediaConfig.tvdbApiKey ? MASK : null,
                 omdbApiKey: mediaConfig.omdbApiKey ? MASK : null
             } : null,
+            appConfig: appConfig || null,
             isFirstRunDismissed: adminUser?.isFirstRunDismissed || false
         };
     } catch (error) {
-        return { initialized: false, hasAdmin: false, config: null, aiConfig: null, mediaConfig: null, isFirstRunDismissed: false };
+        return { initialized: false, hasAdmin: false, config: null, aiConfig: null, mediaConfig: null, appConfig: null, isFirstRunDismissed: false };
     }
 }
 
@@ -342,7 +346,19 @@ export async function saveSystemConfig(data: any) {
             await db.mediaConfig.create({ data: mediaData });
         }
 
-        // 4. Admin User (if creating new)
+        // 4. App Config
+        const existingApp = await db.appConfig.findFirst();
+        const appData = {
+            anonymizeLeaderboard: data.anonymizeLeaderboard === 'on' || data.anonymizeLeaderboard === true
+        };
+
+        if (existingApp) {
+            await db.appConfig.update({ where: { id: existingApp.id }, data: appData });
+        } else {
+            await db.appConfig.create({ data: appData });
+        }
+
+        // 5. Admin User (if creating new)
         if (data.username && data.password) {
             // Simple hash replacement since I can't import bcrypt easily in this context without verification
             // In a real app we'd use bcrypt.hash(data.password, 10).

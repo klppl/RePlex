@@ -55,7 +55,7 @@ export interface StatsResult {
     hasSynced?: boolean;
 }
 
-export async function getStats(userId: number, year?: number, from?: Date, to?: Date, options: { forceRefresh?: boolean } = {}): Promise<StatsResult> {
+export async function getStats(userId: number, year?: number, from?: Date, to?: Date, options: { forceRefresh?: boolean, onProgress?: (msg: string) => void } = {}): Promise<StatsResult> {
     if (!year) year = new Date().getFullYear();
     const startDate = from || new Date(year, 0, 1);
     const endDate = to || new Date(year + 1, 0, 1);
@@ -67,6 +67,7 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     // Actually, the user object holds ONE cache string. It probably represents the "Main Dashboard" view.
 
     const aiConfig = await db.aiConfig.findFirst();
+    const appConfig = await db.appConfig.findFirst();
 
     if (!options.forceRefresh) {
         const user = await db.user.findUnique({
@@ -481,6 +482,7 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
 
     if (aiConfig?.enabled && aiConfig.apiKey && hasData && (options.forceRefresh || !aiSummary)) {
         console.log("Generating AI Summary...");
+        if (options.onProgress) options.onProgress("Generating AI Summary (this may take 10-20 seconds)...");
         try {
             const OpenAI = require("openai");
             const openai = new OpenAI({ apiKey: aiConfig.apiKey });
@@ -631,7 +633,13 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
             // 1. Identification
             if (item.isYou) return { label: "You", seconds: item.seconds, isYou: true };
 
-            // 2. Anonymization Logic
+            // 2. Check Anonymization Setting
+            const anonymize = appConfig?.anonymizeLeaderboard ?? true;
+            if (!anonymize) {
+                return { label: item.label, seconds: item.seconds, isYou: false };
+            }
+
+            // 3. Anonymization Logic
             let list = MID_TIER;
             const pct = 1 - (index / leaderboard.length); // 1.0 (Top) -> 0.0 (Bottom)
 

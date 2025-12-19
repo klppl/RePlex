@@ -35,6 +35,11 @@ model AiConfig {
   instructions String? @default("Analyze the user’s Plex statistics and produce a brutally honest /r/roastme-style roast. Be mean, dry, and sarcastic. No empathy, no disclaimers, no praise unless it is immediately undercut. Treat the stats as evidence of bad habits, questionable taste, avoidance of sleep, commitment issues, nostalgia addiction, or fake “good taste.” If data is missing, infer something unflattering. Write one or two short paragraphs that summarize the user as a person based solely on their viewing behavior. No emojis, no self-reference, no moral lessons. Roast choices and habits only, not protected traits. The result should be funny, uncomfortable, and very shareable.")
 }
 
+model AppConfig {
+  id Int @id @default(1)
+  anonymizeLeaderboard Boolean @default(true)
+}
+
 model AdminUser {
   id           Int    @id @default(autoincrement())
   username     String @unique

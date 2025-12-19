@@ -15,6 +15,7 @@ interface Props {
         config: any;
         aiConfig: any;
         mediaConfig: any;
+        appConfig: any;
         isFirstRunDismissed?: boolean;
     };
     isAuthenticated: boolean;
@@ -101,21 +102,42 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
     const handleRefreshUser = async (id: number) => {
         setGeneratingId(id);
 
-        // Open terminal and log start
         if (!isTerminalContentVisible) setIsTerminalContentVisible(true);
         const username = users.find(u => u.id === id)?.username || `User ${id}`;
-        setTerminalLogs(prev => [...prev, `[ADMIN] Starting full refresh for ${username}...`, `[ADMIN] Force syncing history from Tautulli (this may take a moment)...`]);
+        setTerminalLogs(prev => [...prev, `[ADMIN] Requesting refresh for ${username}...`]);
+        setIsStreaming(true);
 
-        const res = await refreshUser(id);
+        try {
+            const response = await fetch(`/api/admin/user/refresh?id=${id}`);
+            if (!response.ok) throw new Error('Failed to start refresh');
 
-        if (res.success) {
-            setTerminalLogs(prev => [...prev, `[ADMIN] Success! Stats generated for ${username}.`]);
+            const reader = response.body?.getReader();
+            if (!reader) throw new Error('No response stream');
+
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n').filter(Boolean);
+
+                setTerminalLogs(prev => [...prev, ...lines]);
+            }
+
+            // After stream completes
             router.refresh();
-        } else {
-            setTerminalLogs(prev => [...prev, `[ERROR] Failed to refresh ${username}: ${res.error}`]);
-            alert("Failed: " + res.error);
+            setTerminalLogs(prev => [...prev, `[ADMIN] Process output stream closed.`]);
+
+        } catch (error: any) {
+            console.error(error);
+            setTerminalLogs(prev => [...prev, `[ERROR] ${error.message}`]);
+            alert("Refresh failed: " + error.message);
+        } finally {
+            setGeneratingId(null);
+            setIsStreaming(false);
         }
-        setGeneratingId(null);
     };
 
     const handleGenerateAll = async () => {
@@ -594,6 +616,18 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                     <div className="space-y-2">
                         <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">OMDb API Key</label>
                         <input name="omdbApiKey" type="password" defaultValue={status.mediaConfig?.omdbApiKey || ''} placeholder="Rotten Tomatoes & Box Office Data..." className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-amber-500 outline-none transition" />
+                    </div>
+                </div>
+
+                {/* Report Configuration */}
+                <div className="space-y-6 pt-6 border-t border-slate-800">
+                    <h3 className="text-lg font-bold text-blue-400 uppercase tracking-widest text-xs border-b border-slate-800 pb-2">Report Configuration</h3>
+                    <div className="flex items-center gap-3">
+                        <input type="checkbox" name="anonymizeLeaderboard" id="anonymizeLeaderboard" defaultChecked={status.appConfig?.anonymizeLeaderboard ?? true} className="w-5 h-5 rounded bg-slate-800 border-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-slate-900" />
+                        <div className="flex flex-col">
+                            <label htmlFor="anonymizeLeaderboard" className="text-slate-300 select-none cursor-pointer font-bold">Anonymize Peer Comparison Leaderboard</label>
+                            <span className="text-slate-500 text-xs">If unchecked, real usernames will be displayed in the leaderboard on user reports.</span>
+                        </div>
                     </div>
                 </div>
 
