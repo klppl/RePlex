@@ -39,6 +39,9 @@ RUN adduser --system --uid 1001 nextjs
 # Install openssl and su-exec
 RUN apk add --no-cache openssl su-exec
 
+# Security Fix: Update npm to latest to resolve bundled dependency CVEs (cross-spawn, etc)
+RUN npm install -g npm@latest
+
 # Install prisma CLI (pinned version for cache stability)
 # We don't copy package.json here to avoid cache invalidation when deps change
 RUN mkdir -p /app/prisma-cli && \
