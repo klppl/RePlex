@@ -128,11 +128,63 @@ export async function syncHistoryForUser(
 
             // Fetch metadata for unique items (Parallelized with concurrency limit)
             const uniqueKeys = Array.from(uniqueItemsToFetch);
-            const BATCH_SIZE = 10;
 
-            for (let i = 0; i < uniqueKeys.length; i += BATCH_SIZE) {
-                const batch = uniqueKeys.slice(i, i + BATCH_SIZE);
-                // Reduced verbosity on batches
+            // OPTIMIZATION: Check local DB for existing metadata to avoid Tautulli hits
+            // We look for any valid WatchHistory entry with this ratingKey that has filled metadata
+            const missingKeys: string[] = [];
+
+            // Check in chunks to avoid SQLite limits on "IN" clause
+            const CHECK_BATCH = 100;
+            for (let i = 0; i < uniqueKeys.length; i += CHECK_BATCH) {
+                const chunk = uniqueKeys.slice(i, i + CHECK_BATCH);
+                const existingRows = await db.watchHistory.findMany({
+                    where: {
+                        ratingKey: { in: chunk },
+                        NOT: {
+                            actors: null,
+                            genres: null
+                        }
+                    },
+                    select: {
+                        ratingKey: true,
+                        actors: true,
+                        genres: true,
+                        rating: true,
+                        fileSize: true
+                    }
+                });
+
+                // Map existing to cache
+                for (const row of existingRows) {
+                    if (row.ratingKey) {
+                        // Reconstruct a partial meta object sufficient for insertion
+                        metadataCache[row.ratingKey] = {
+                            actors: row.actors ? row.actors.split(',') : [],
+                            genres: row.genres ? row.genres.split(',').map(g => ({ tag: g })) : [],
+                            rating: row.rating ? String(row.rating) : null,
+                            media_info: row.fileSize ? [{ parts: [{ file_size: row.fileSize.toString() }] }] : []
+                        };
+                    }
+                }
+            }
+
+            // Identify what's still missing
+            for (const key of uniqueKeys) {
+                if (!metadataCache[key]) {
+                    missingKeys.push(key);
+                }
+            }
+
+            if (onProgress && missingKeys.length > 0) {
+                onProgress(`Metadata: Downloading ${missingKeys.length} new items (${uniqueKeys.length - missingKeys.length} found in cache)...`);
+            }
+
+            const BATCH_SIZE = 5; // Reduced from 10 to 5 to be gentler
+
+            for (let i = 0; i < missingKeys.length; i += BATCH_SIZE) {
+                if (signal?.aborted) throw new Error('Sync aborted');
+
+                const batch = missingKeys.slice(i, i + BATCH_SIZE);
 
                 await Promise.all(batch.map(async (key) => {
                     try {
@@ -144,6 +196,9 @@ export async function syncHistoryForUser(
                         // ignore individual metadata failures
                     }
                 }));
+
+                // Throttle: Sleep 500ms between batches
+                await new Promise(r => setTimeout(r, 500));
             }
 
             // 4. Save
@@ -313,16 +368,43 @@ export async function syncGlobalHistory(
 
                 // Fetch metadata for unique items
                 const uniqueKeys = Array.from(uniqueItemsToFetch);
-                const META_BATCH = 25; // Keep high for network speed
 
-                for (let j = 0; j < uniqueKeys.length; j += META_BATCH) {
-                    const mb = uniqueKeys.slice(j, j + META_BATCH);
+                // Local Cache Check
+                const missingKeys: string[] = [];
+                const CHECK_BATCH = 100;
+                for (let j = 0; j < uniqueKeys.length; j += CHECK_BATCH) {
+                    const chunk = uniqueKeys.slice(j, j + CHECK_BATCH);
+                    const existingRows = await db.watchHistory.findMany({
+                        where: { ratingKey: { in: chunk }, NOT: { actors: null, genres: null } },
+                        select: { ratingKey: true, actors: true, genres: true, rating: true, fileSize: true }
+                    });
+                    for (const row of existingRows) {
+                        if (row.ratingKey) {
+                            metadataCache[row.ratingKey] = {
+                                actors: row.actors ? row.actors.split(',') : [],
+                                genres: row.genres ? row.genres.split(',').map(g => ({ tag: g })) : [],
+                                rating: row.rating ? String(row.rating) : null,
+                                media_info: row.fileSize ? [{ parts: [{ file_size: row.fileSize.toString() }] }] : []
+                            };
+                        }
+                    }
+                }
+
+                for (const key of uniqueKeys) {
+                    if (!metadataCache[key]) missingKeys.push(key);
+                }
+
+                const META_BATCH = 5; // Reduced from 25 to 5
+
+                for (let j = 0; j < missingKeys.length; j += META_BATCH) {
+                    const mb = missingKeys.slice(j, j + META_BATCH);
                     await Promise.all(mb.map(async (key) => {
                         try {
                             const meta = await fetchMetadata(config, key);
                             if (meta) metadataCache[key] = meta;
                         } catch (err) { }
                     }));
+                    await new Promise(r => setTimeout(r, 500)); // Sleep
                 }
 
                 // Transaction: Delete & Insert

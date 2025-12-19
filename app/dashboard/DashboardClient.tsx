@@ -1250,7 +1250,11 @@ export default function DashboardClient({ initialStats, userId, year, shouldGene
                                 <h3 className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-1">The Toast Index</h3>
                                 <p className="text-lg font-bold text-white leading-tight">
                                     Your device refused to do the work, so the server had to. You forced the server's CPU to generate enough heat to toast <span className="text-orange-400">{Math.round(((stats.totalSeconds / 3600) * (stats.techStats.transcodePercent / 100) * 0.1) / 0.03).toLocaleString()} slices</span> of bread.
-                                    <br /><span className="text-sm font-normal text-slate-500 italic opacity-50">Say sorry to the admin.</span>
+                                    <br /><span className="text-xs font-normal text-slate-500 italic opacity-50 block mt-2">
+                                        Formula: trunc((Hours × Transcode% × 0.1kWh) / 0.03kWh)
+                                        <br />
+                                        Say sorry to the admin.
+                                    </span>
                                 </p>
                             </div>
                         </div>
