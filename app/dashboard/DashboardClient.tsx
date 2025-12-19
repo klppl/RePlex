@@ -569,7 +569,7 @@ export default function DashboardClient({ initialStats, userId, year, shouldGene
                             <h3 className="text-emerald-400 uppercase tracking-widest text-sm font-bold mb-4">Value Proposition</h3>
 
                             <div className="relative z-10">
-                                <div className="text-6xl md:text-8xl font-black text-white mb-4 tracking-tighter">
+                                <div className="text-4xl sm:text-5xl md:text-8xl font-black text-white mb-4 tracking-tighter">
                                     ${stats.valueProposition.toLocaleString()}
                                 </div>
                                 <div className="text-xl text-slate-400 max-w-2xl">
@@ -592,7 +592,7 @@ export default function DashboardClient({ initialStats, userId, year, shouldGene
                             <h3 className="text-red-500 uppercase tracking-widest text-sm font-bold mb-4">The "Find Out" Value</h3>
 
                             <div className="relative z-10">
-                                <div className="text-6xl md:text-8xl font-black text-white mb-4 tracking-tighter drop-shadow-[0_0_15px_rgba(220,38,38,0.5)]">
+                                <div className="text-4xl sm:text-5xl md:text-8xl font-black text-white mb-4 tracking-tighter drop-shadow-[0_0_15px_rgba(220,38,38,0.5)]">
                                     ${stats.pirateBayValue.toLocaleString()}
                                 </div>
                                 <div className="text-xl text-slate-400 max-w-2xl">
