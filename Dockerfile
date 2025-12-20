@@ -80,4 +80,6 @@ ENV DISABLE_SECURE_COOKIES="false"
 # Persist the database directory
 VOLUME ["/app/prisma"]
 
+USER nextjs
+
 ENTRYPOINT ["./docker-entrypoint.sh"]
