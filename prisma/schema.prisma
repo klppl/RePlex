@@ -38,6 +38,8 @@ model AiConfig {
 model AppConfig {
   id Int @id @default(1)
   anonymizeLeaderboard Boolean @default(true)
+  yearSetupMonth Int @default(1)
+  yearSetupDay   Int @default(1)
 }
 
 model AdminUser {

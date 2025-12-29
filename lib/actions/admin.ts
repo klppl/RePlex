@@ -7,6 +7,7 @@ import { getStats } from '../services/stats';
 import { syncUsers } from '../services/tautulli';
 import { syncHistoryForUser, syncGlobalHistory } from '../services/sync';
 import { SignJWT } from 'jose';
+import { getCurrentReportingYear } from '@/lib/utils/date';
 import { cookies } from 'next/headers';
 
 const MASK = "••••••••";
@@ -349,7 +350,9 @@ export async function saveSystemConfig(data: any) {
         // 4. App Config
         const existingApp = await db.appConfig.findFirst();
         const appData = {
-            anonymizeLeaderboard: data.anonymizeLeaderboard === 'on' || data.anonymizeLeaderboard === true
+            anonymizeLeaderboard: data.anonymizeLeaderboard === 'on' || data.anonymizeLeaderboard === true,
+            yearSetupMonth: parseInt(data.yearSetupMonth as string) || 1,
+            yearSetupDay: parseInt(data.yearSetupDay as string) || 1,
         };
 
         if (existingApp) {
@@ -417,9 +420,9 @@ export async function syncAllUsersHistory() {
         if (!session) throw new Error("Unauthorized");
 
         // Current Year Logic
-        const now = new Date();
-        const startOfYear = new Date(now.getFullYear(), 0, 1); // Jan 1st
-        const endOfYear = new Date(now.getFullYear(), 11, 31); // Dec 31st
+        const currentYear = await getCurrentReportingYear();
+        const startOfYear = new Date(currentYear, 0, 1); // Jan 1st
+        const endOfYear = new Date(currentYear, 11, 31); // Dec 31st
 
         console.log(`[ADMIN] Starting global sync from ${startOfYear.toDateString()} to ${endOfYear.toDateString()}...`);
 

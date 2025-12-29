@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { syncHistoryForUser } from '@/lib/services/sync';
+import { getCurrentReportingYear } from '@/lib/utils/date';
 
 export const runtime = 'nodejs'; // Use nodejs runtime for streaming if needed, or edge. 'nodejs' is safer for Prisma.
 
@@ -17,7 +18,8 @@ export async function POST(request: Request) {
     }
 
     const now = new Date();
-    const fromDate = from ? new Date(from) : new Date(now.getFullYear(), 0, 1);
+    const currentYear = await getCurrentReportingYear();
+    const fromDate = from ? new Date(from) : new Date(currentYear, 0, 1);
     const toDate = to ? new Date(to) : now;
 
     if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {

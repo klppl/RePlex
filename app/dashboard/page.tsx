@@ -1,4 +1,5 @@
 import { getStats } from '@/lib/services/stats';
+import { getCurrentReportingYear } from '@/lib/utils/date';
 import { StatCard } from '../components/StatCard';
 import { Metadata } from 'next';
 import DashboardClient from './DashboardClient';
@@ -23,7 +24,7 @@ export default async function DashboardPage({
 }) {
     const resolvedSearchParams = await searchParams;
     let userId = resolvedSearchParams['userId'] ? Number(resolvedSearchParams['userId']) : null;
-    const year = resolvedSearchParams['year'] ? Number(resolvedSearchParams['year']) : new Date().getFullYear();
+    const year = resolvedSearchParams['year'] ? Number(resolvedSearchParams['year']) : await getCurrentReportingYear();
 
     // Check headers from middleware (SSO)
     const headerList = await headers();

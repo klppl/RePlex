@@ -629,6 +629,28 @@ export default function AdminDashboardClient({ initialUsers, status, isAuthentic
                             <span className="text-slate-500 text-xs">If unchecked, real usernames will be displayed in the leaderboard on user reports.</span>
                         </div>
                     </div>
+
+                    <div className="space-y-2 pt-4 border-t border-slate-800/50">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">New Reporting Year Starts On</label>
+                        <p className="text-xs text-slate-600 mb-2">Before this date, the system defaults to the previous year for reports (e.g. for access in early Jan-April).</p>
+                        <div className="flex gap-4">
+                            <select name="yearSetupMonth" defaultValue={status.appConfig?.yearSetupMonth || 1} className="bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 outline-none transition">
+                                <option value="1">January</option>
+                                <option value="2">February</option>
+                                <option value="3">March</option>
+                                <option value="4">April</option>
+                                <option value="5">May</option>
+                                <option value="6">June</option>
+                                <option value="7">July</option>
+                                <option value="8">August</option>
+                                <option value="9">September</option>
+                                <option value="10">October</option>
+                                <option value="11">November</option>
+                                <option value="12">December</option>
+                            </select>
+                            <input name="yearSetupDay" type="number" min="1" max="31" defaultValue={status.appConfig?.yearSetupDay || 1} className="w-24 bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 outline-none transition" />
+                        </div>
+                    </div>
                 </div>
 
                 {/* Admin Account - Only if Setup Mode (Creating New) */}

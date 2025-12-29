@@ -1,5 +1,6 @@
 import db from '../db';
 import { Prisma } from '@prisma/client';
+import { getCurrentReportingYear } from '@/lib/utils/date';
 
 export interface StatsResult {
     totalDuration: string;
@@ -56,7 +57,7 @@ export interface StatsResult {
 }
 
 export async function getStats(userId: number, year?: number, from?: Date, to?: Date, options: { forceRefresh?: boolean, onProgress?: (msg: string) => void } = {}): Promise<StatsResult> {
-    if (!year) year = new Date().getFullYear();
+    if (!year) year = await getCurrentReportingYear();
     const startDate = from || new Date(year, 0, 1);
     const endDate = to || new Date(year + 1, 0, 1);
 
