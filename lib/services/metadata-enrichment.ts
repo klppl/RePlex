@@ -1,6 +1,7 @@
 import db from '../db';
 import { fetchMetadata } from './tautulli';
 import { fetchOmdbMetadata } from './omdb';
+import { extractUniqueItems } from './extract-unique-items';
 
 // --- Interfaces ---
 
@@ -122,38 +123,8 @@ export async function processMetadataEnrichment(onProgress?: (msg: string) => Pr
         return;
     }
 
-    // 1. Identify candidates (same logic as before: unique items from history)
-    const history = await db.watchHistory.findMany({
-        select: {
-            title: true,
-            year: true,
-            mediaType: true,
-            ratingKey: true,
-            grandparentTitle: true,
-            grandparentRatingKey: true
-        },
-        distinct: ['ratingKey', 'grandparentRatingKey']
-    });
-
-    const uniqueItems = new Map<string, { title: string, year?: number, type: 'movie' | 'series', ratingKey: string }>();
-
-    for (const entry of history) {
-        if (entry.mediaType === 'movie' && entry.ratingKey && entry.title) {
-            uniqueItems.set(entry.ratingKey, {
-                title: entry.title,
-                year: entry.year || undefined,
-                type: 'movie',
-                ratingKey: entry.ratingKey
-            });
-        } else if (entry.mediaType === 'episode' && entry.grandparentRatingKey && entry.grandparentTitle) {
-            uniqueItems.set(entry.grandparentRatingKey, {
-                title: entry.grandparentTitle,
-                year: undefined,
-                type: 'series',
-                ratingKey: entry.grandparentRatingKey
-            });
-        }
-    }
+    // 1. Identify candidates (unique items from history)
+    const uniqueItems = await extractUniqueItems();
 
     // 2. Filter out items that already have a Unified Score (or recent update)
     // For specific requirement "upsert", we might want to re-process if old? 

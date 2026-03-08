@@ -2,13 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { verifySession } from '@/lib/auth';
 import { jwtVerify } from 'jose';
-
-const secret = process.env.JWT_SECRET;
-if (!secret && process.env.NODE_ENV === 'production') {
-    throw new Error("FATAL: JWT_SECRET is not defined. Check your environment variables.");
-}
-const SECRET_KEY = secret || 'super-secret-key-change-this';
-const key = new TextEncoder().encode(SECRET_KEY);
+import { jwtKey } from '@/lib/jwt-config';
 export async function middleware(request: NextRequest) {
     // 1. Admin Route Protection
     if (request.nextUrl.pathname.startsWith('/admin')) {
@@ -18,7 +12,7 @@ export async function middleware(request: NextRequest) {
         let isAdmin = false;
         if (adminToken) {
             try {
-                await jwtVerify(adminToken, key);
+                await jwtVerify(adminToken, jwtKey);
                 isAdmin = true;
             } catch (e) { }
         }

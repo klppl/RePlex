@@ -3,13 +3,7 @@ import { pbkdf2, randomBytes, timingSafeEqual } from 'crypto';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
-
-const secret = process.env.JWT_SECRET;
-if (!secret && process.env.NODE_ENV === 'production') {
-    throw new Error("FATAL: JWT_SECRET is not defined. Check your environment variables.");
-}
-const SECRET_KEY = secret || 'super-secret-key-change-this';
-export const key = new TextEncoder().encode(SECRET_KEY);
+import { jwtKey } from './jwt-config';
 
 export async function hashPassword(password: string): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -40,7 +34,7 @@ export async function createAdminSession(username: string) {
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
         .setExpirationTime('24h')
-        .sign(key);
+        .sign(jwtKey);
 
     const cookieStore = await cookies();
     cookieStore.set('admin_session', token, {
@@ -59,7 +53,7 @@ export async function verifyAdminSession(req?: NextRequest) {
     if (!token) return null;
 
     try {
-        const { payload } = await jwtVerify(token, key);
+        const { payload } = await jwtVerify(token, jwtKey);
 
         // Extra security: Ensure the user actually exists in the DB
         const cx = await import('@/lib/db');
@@ -80,7 +74,7 @@ export async function verifyAdminSession(req?: NextRequest) {
 }
 export async function verifyAdminToken(token: string) {
     try {
-        const { payload } = await jwtVerify(token, key);
+        const { payload } = await jwtVerify(token, jwtKey);
         return payload;
     } catch (e) {
         return null;
