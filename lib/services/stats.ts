@@ -6,7 +6,6 @@ export interface StatsResult {
     totalDuration: string;
     totalSeconds: number;
 
-    topShows: { title: string; duration: number }[];
     lazyDay: {
         winner: { day: string; hours: number };
         chartData: { day: string; short: string; hours: number }[];
@@ -22,7 +21,6 @@ export interface StatsResult {
     mediaTypeSplit: { movies: number; shows: number };
     topShowByEpisodes?: { title: string; count: number };
 
-    // Phase 6 Additions
     yourStan?: { actor: string; count: number; time: number; titles: string[]; imageUrl?: string }[];
     genreWheel: { genre: string; percentage: number }[];
     timeTraveler: { decade: string; count: number };
@@ -60,12 +58,6 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     if (!year) year = await getCurrentReportingYear();
     const startDate = from || new Date(year, 0, 1);
     const endDate = to || new Date(year + 1, 0, 1);
-
-    // 0. Cache Check
-    // Only check cache if usage matches standard year/range (simplification for now)
-    // If specific range dates are passed, we might skip cache or need smarter cache keys.
-    // For now, assuming cache is for the "Standard View" (Current Year / Default).
-    // Actually, the user object holds ONE cache string. It probably represents the "Main Dashboard" view.
 
     const aiConfig = await db.aiConfig.findFirst();
     const appConfig = await db.appConfig.findFirst();
@@ -125,11 +117,7 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
 
 
 
-    // Simplification: removed topShows as requested
-    const topShows: { title: string; duration: number }[] = [];
-
     // 2. Your Stan (Top Actor)
-    // Actors are CSV string. We need to fetch all strings and process in JS.
     const actorProjects: Record<string, Set<string>> = {};
     const actorDuration: Record<string, number> = {};
 
@@ -290,9 +278,7 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
 
     const bingeRecord = maxStreak > 1 ? { show: bingeShow, count: maxStreak, date: bingeDate } : undefined;
 
-    // ... (Old Lazy Day / Activity Type Logic - Keeping it same or condensed)
-    // Re-using previous blocks...
-
+    // Lazy Day (day of week breakdown)
     const lazyDayRaw = await db.$queryRaw<{ day: string, total: bigint | number }[]>`
         SELECT strftime('%w', date / 1000, 'unixepoch') as day, SUM(duration) as total
         FROM WatchHistory
@@ -334,7 +320,7 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         chartData: rotatedChartData
     };
 
-    // ... Activity Type ...
+    // Activity Type (time of day breakdown)
     const hourlyRaw = await db.$queryRaw<{ hour: string, total: bigint | number }[]>`
         SELECT strftime('%H', date / 1000, 'unixepoch') as hour, SUM(duration) as total
         FROM WatchHistory
@@ -345,7 +331,7 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         ORDER BY total DESC
     `;
     let night = 0, morning = 0, day = 0;
-    hourlyRaw.forEach((r: any) => {
+    hourlyRaw.forEach((r) => {
         const h = parseInt(r.hour);
         const val = Number(r.total);
         if (h >= 5 && h < 11) morning += val;
@@ -403,7 +389,7 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         ]
     };
 
-    // ... Longest Break ...
+    // Longest Break
     const longestBreakRaw = await db.$queryRaw<{ title: string, diff: number }[]>`
       SELECT COALESCE(NULLIF(grandparentTitle, ''), title) as title, (MAX(date/1000) - MIN(date/1000)) as diff
       FROM WatchHistory
@@ -480,32 +466,18 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         }
     }
 
-    // 8. Value Proposition
-    // Formula: (Movies * $12) + ((TV_Hours / 10) * $15.49)
-    // 10 hours of TV ~ 1 month of streaming value?
-    // Cost per movie: ~$12 (Blu-ray/Digital Purchase)
-    // Cost per TV month: ~$15.49 (Standard Netflix)
-    // assumption: Avg TV season is 10 hours.
-
-    // Count exact number of movies watched (regardless of finish state, or maybe just > 0 duration?)
-    // Using topMoviesRaw counts only >1 plays. We need total movie count.
-    // Group 4: Parallel queries for value proposition
+    // Value Proposition + Pirate Bay Value
     const [uniqueMoviesCount, uniqueEpisodesCount] = await Promise.all([
         db.watchHistory.groupBy({ by: ['ratingKey'], where: { ...where, mediaType: 'movie' } }),
         db.watchHistory.groupBy({ by: ['ratingKey'], where: { ...where, mediaType: 'episode' } }),
     ]);
-    // Distinct movies played
     const movieCount = uniqueMoviesCount.length;
-
     const tvHours = showSeconds / 3600;
-
-    const movieValue = movieCount * 12.00;
-    const tvValue = (tvHours / 10.0) * 15.49;
-    const totalValue = Math.round(movieValue + tvValue);
+    const totalValue = Math.round((movieCount * 12.00) + ((tvHours / 10.0) * 15.49));
     const episodeCount = uniqueEpisodesCount.length;
     const pirateBayValue = (movieCount + episodeCount) * 150000;
 
-    // 10. Tier Logic
+    // Tier Logic (for leaderboard anonymization)
     const GOD_TIER = [
         "The Server Load", "Vitamin D Deficient", "The Retina Burner", "Premium Bandwidth Hog",
         "CEO of Binging", "The Electricity Bill", "Couch Fossil", "The 4K Connoisseur",
@@ -532,9 +504,7 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         "404 User Not Found", "Lowest of Them All"
     ];
 
-    const pickName = (list: string[]) => list[Math.floor(Math.random() * list.length)];
-
-    // 9. Comparison Logic (Phase 7) - Leaderboard
+    // Comparison Logic - Leaderboard
     const comparison = {
         you: { seconds: totalSeconds, label: "You" },
         average: { seconds: 0, label: "Average" },
@@ -544,8 +514,6 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     };
 
     try {
-        // ... (Leaderboard Logic - Unchanged) ...
-        // 1. Fetch ALL users first (to handle those with 0 history)
         const allUsers = await db.user.findMany({
             select: { id: true, username: true }
         });
@@ -772,7 +740,7 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     });
 
     const result: StatsResult = {
-        totalDuration, totalSeconds, topShows, lazyDay, activityType,
+        totalDuration, totalSeconds, lazyDay, activityType,
         oldestMovie: oldestMovieRaw ? { title: oldestMovieRaw.title, year: oldestMovieRaw.year! } : undefined,
         oldestShow: oldestShowRaw ? { title: oldestShowRaw.grandparentTitle!, year: oldestShowRaw.year! } : undefined,
         longestBreak, mediaTypeSplit: { movies: movieSeconds, shows: showSeconds }, topShowByEpisodes,
@@ -800,13 +768,6 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     };
 
     // Cache the result
-    /*
-       We blindly save to statsCache.
-       NOTE: If getStats is called with specific dates (not default), we overwrite the "main" cache.
-       This is a known limitation of this simple implementation. 
-       Ideally, we'd cache based on params, but for this specific app (annual wrap), 
-       it usually just shows the 'current' wrap. 
-    */
     try {
         await db.user.update({
             where: { id: userId },

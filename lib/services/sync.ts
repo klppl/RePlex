@@ -89,7 +89,7 @@ export async function syncHistoryForUser(
             const formattedDate = format(currentDate, 'yyyy-MM-dd');
             // if (onProgress) onProgress(`DEBUG: Fetching for ${formattedDate}`);
 
-            const history = await fetchHistory(config as any, userId, currentDate);
+            const history = await fetchHistory(config, userId, currentDate);
 
             // 3. Process & Filter
             const validItems = [];
@@ -243,7 +243,7 @@ export async function syncGlobalHistory(
                 // We'll update main progress loop after batch.
 
                 // Fetch Global History for Day
-                const history = await fetchHistory(config as any, null, currentDate); // null user_id = global
+                const history = await fetchHistory(config, null, currentDate); // null user_id = global
 
                 // Filter for Active Users
                 const validItems = [];
