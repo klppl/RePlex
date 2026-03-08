@@ -95,12 +95,15 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         }
     };
 
-    // 1. Existing Stats (Condensed)
-    const splitAgg = await db.watchHistory.groupBy({
-        by: ['mediaType'],
-        where,
-        _sum: { duration: true, fileSize: true }
-    });
+    // 1. Existing Stats (Condensed) - Group 1: Parallel queries
+    const [splitAgg, oldestMovieRaw, oldestShowRaw, allActorsRaw, allGenresRaw, decadesRaw] = await Promise.all([
+        db.watchHistory.groupBy({ by: ['mediaType'], where, _sum: { duration: true, fileSize: true } }),
+        db.watchHistory.findFirst({ where: { ...where, mediaType: 'movie', year: { not: null, gt: 1800 } }, orderBy: { year: 'asc' }, select: { title: true, year: true } }),
+        db.watchHistory.findFirst({ where: { ...where, mediaType: 'episode', year: { not: null, gt: 1800 } }, orderBy: { year: 'asc' }, select: { grandparentTitle: true, year: true } }),
+        db.watchHistory.findMany({ where: { ...where, actors: { not: null } }, select: { actors: true, mediaType: true, title: true, grandparentTitle: true, duration: true } }),
+        db.watchHistory.findMany({ where: { ...where, genres: { not: null } }, select: { genres: true } }),
+        db.watchHistory.findMany({ where: { ...where, year: { not: null } }, select: { year: true } }),
+    ]);
 
     let movieSeconds = 0;
     let showSeconds = 0;
@@ -125,16 +128,8 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     // Simplification: removed topShows as requested
     const topShows: { title: string; duration: number }[] = [];
 
-    const oldestMovieRaw = await db.watchHistory.findFirst({ where: { ...where, mediaType: 'movie', year: { not: null, gt: 1800 } }, orderBy: { year: 'asc' }, select: { title: true, year: true } });
-    const oldestShowRaw = await db.watchHistory.findFirst({ where: { ...where, mediaType: 'episode', year: { not: null, gt: 1800 } }, orderBy: { year: 'asc' }, select: { grandparentTitle: true, year: true } });
-
     // 2. Your Stan (Top Actor)
     // Actors are CSV string. We need to fetch all strings and process in JS.
-    const allActorsRaw = await db.watchHistory.findMany({
-        where: { ...where, actors: { not: null } },
-        select: { actors: true, mediaType: true, title: true, grandparentTitle: true, duration: true }
-    });
-
     const actorProjects: Record<string, Set<string>> = {};
     const actorDuration: Record<string, number> = {};
 
@@ -192,11 +187,6 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     }
 
     // 3. Genre Wheel
-    const allGenresRaw = await db.watchHistory.findMany({
-        where: { ...where, genres: { not: null } },
-        select: { genres: true }
-    });
-
     const genreCounts: Record<string, number> = {};
     let totalGenreTags = 0;
     allGenresRaw.forEach(row => {
@@ -216,11 +206,6 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         .slice(0, 5); // Top 5
 
     // 4. Time Traveler (Decades)
-    const decadesRaw = await db.watchHistory.findMany({
-        where: { ...where, year: { not: null } },
-        select: { year: true }
-    });
-
     const decadeCounts: Record<string, number> = {};
     decadesRaw.forEach(r => {
         if (!r.year) return;
@@ -236,28 +221,16 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     const totalYears = decadesRaw.reduce((sum, r) => sum + (r.year || 0), 0);
     const averageYear = decadesRaw.length > 0 ? Math.round(totalYears / decadesRaw.length) : new Date().getFullYear();
 
-    // 5. Tech Stats
-    const techRaw = await db.watchHistory.aggregate({
-        where,
-        _sum: { fileSize: true },
-        _count: { transcodeDecision: true } // just count rows
-    });
+    // 5. Tech Stats - Group 2: Parallel queries
+    const [techRaw, transcodeCount, totalPlays, platformsRaw] = await Promise.all([
+        db.watchHistory.aggregate({ where, _sum: { fileSize: true }, _count: { transcodeDecision: true } }),
+        db.watchHistory.count({ where: { ...where, transcodeDecision: 'transcode' } }),
+        db.watchHistory.count({ where }),
+        db.watchHistory.groupBy({ by: ['player'], where: { ...where, player: { not: null } }, _count: { player: true }, orderBy: { _count: { player: 'desc' } }, take: 5 }),
+    ]);
 
     // Transcode %
-    const transcodeCount = await db.watchHistory.count({
-        where: { ...where, transcodeDecision: 'transcode' }
-    });
-    const totalPlays = await db.watchHistory.count({ where });
     const transcodePercent = totalPlays > 0 ? Math.round((transcodeCount / totalPlays) * 100) : 0;
-
-    // Top Platforms
-    const platformsRaw = await db.watchHistory.groupBy({
-        by: ['player'],
-        where: { ...where, player: { not: null } },
-        _count: { player: true },
-        orderBy: { _count: { player: 'desc' } },
-        take: 5
-    });
     const topPlatforms = platformsRaw.map(p => ({
         platform: p.player || "Unknown",
         count: p._count.player
@@ -265,26 +238,13 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
 
     const totalDataGB = techRaw._sum.fileSize ? Math.round(Number(techRaw._sum.fileSize) / (1024 * 1024 * 1024)) : 0;
 
-    // 6. Commitment Issues < 20%
-    // 6. Commitment Issues < 20%
-    const uncommittedRaw = await db.watchHistory.findMany({
-        where: { ...where, percentComplete: { lt: 20 }, mediaType: 'movie' },
-        select: { title: true },
-        take: 50 // Cap at 50 to prevent overflow
-    });
-    const uncommittedCount = await db.watchHistory.count({
-        where: { ...where, percentComplete: { lt: 20 }, mediaType: 'movie' }
-    });
+    // 6. Commitment Issues < 20% + 7. Binge Logic - Group 3: Parallel queries
+    const [uncommittedRaw, uncommittedCount, episodes] = await Promise.all([
+        db.watchHistory.findMany({ where: { ...where, percentComplete: { lt: 20 }, mediaType: 'movie' }, select: { title: true }, take: 50 }),
+        db.watchHistory.count({ where: { ...where, percentComplete: { lt: 20 }, mediaType: 'movie' } }),
+        db.watchHistory.findMany({ where: { ...where, mediaType: 'episode', grandparentRatingKey: { not: null } }, orderBy: { date: 'asc' }, select: { date: true, grandparentTitle: true, duration: true } }),
+    ]);
     const uncommittedTitles = uncommittedRaw.map(u => u.title);
-
-    // 7. Binge Logic (Streak)
-    // Logic: Same show, within 20 mins of each other
-    // Need raw history ordered by date
-    const episodes = await db.watchHistory.findMany({
-        where: { ...where, mediaType: 'episode', grandparentRatingKey: { not: null } },
-        orderBy: { date: 'asc' },
-        select: { date: true, grandparentTitle: true, duration: true }
-    });
 
     let maxStreak = 0;
     let currentStreak = 1;
@@ -529,10 +489,11 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
 
     // Count exact number of movies watched (regardless of finish state, or maybe just > 0 duration?)
     // Using topMoviesRaw counts only >1 plays. We need total movie count.
-    const uniqueMoviesCount = await db.watchHistory.groupBy({ // This is just counting rows really if grouped by ID, duplicate plays?
-        by: ['ratingKey'],
-        where: { ...where, mediaType: 'movie' }
-    });
+    // Group 4: Parallel queries for value proposition
+    const [uniqueMoviesCount, uniqueEpisodesCount] = await Promise.all([
+        db.watchHistory.groupBy({ by: ['ratingKey'], where: { ...where, mediaType: 'movie' } }),
+        db.watchHistory.groupBy({ by: ['ratingKey'], where: { ...where, mediaType: 'episode' } }),
+    ]);
     // Distinct movies played
     const movieCount = uniqueMoviesCount.length;
 
@@ -541,14 +502,6 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
     const movieValue = movieCount * 12.00;
     const tvValue = (tvHours / 10.0) * 15.49;
     const totalValue = Math.round(movieValue + tvValue);
-
-    // 9. Pirate Bay Value (The "Find Out" Phase)
-    // US Statutory damages for willful infringement: up to $150,000 per work.
-    // This is the "High Score" of legal penalties.
-    const uniqueEpisodesCount = await db.watchHistory.groupBy({
-        by: ['ratingKey'],
-        where: { ...where, mediaType: 'episode' }
-    });
     const episodeCount = uniqueEpisodesCount.length;
     const pirateBayValue = (movieCount + episodeCount) * 150000;
 
@@ -871,21 +824,25 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
 
 export async function generateGlobalStats(onProgress?: (msg: string) => void) {
     const users = await db.user.findMany({ select: { id: true, username: true } });
-    let count = 0;
     const total = users.length;
 
     if (onProgress) onProgress(`INFO: Starting generation for ${total} users...`);
 
-    for (const user of users) {
-        count++;
-        const progress = Math.round((count / total) * 100);
-        if (onProgress) onProgress(`GENERATING: [${count}/${total}] ${user.username || 'User ' + user.id} (${progress}%)`);
+    const CONCURRENCY = 3;
+    let completed = 0;
 
-        try {
-            await getStats(user.id, undefined, undefined, undefined, { forceRefresh: true });
-        } catch (e: any) {
-            if (onProgress) onProgress(`ERROR: Failed for ${user.username}: ${e.message}`);
-        }
+    for (let i = 0; i < users.length; i += CONCURRENCY) {
+        const batch = users.slice(i, i + CONCURRENCY);
+        await Promise.all(batch.map(async (user) => {
+            completed++;
+            const progress = Math.round((completed / total) * 100);
+            if (onProgress) onProgress(`GENERATING: [${completed}/${total}] ${user.username || 'User ' + user.id} (${progress}%)`);
+            try {
+                await getStats(user.id, undefined, undefined, undefined, { forceRefresh: true });
+            } catch (e: any) {
+                if (onProgress) onProgress(`ERROR: Failed for ${user.username}: ${e.message}`);
+            }
+        }));
     }
     if (onProgress) onProgress(`INFO: Generation Complete!`);
 }

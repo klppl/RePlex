@@ -93,30 +93,29 @@ export async function syncUsers(): Promise<number> {
 
     const users = await fetchUsers(config);
 
-    let syncedCount = 0;
-    for (const user of users) {
-        // Tautulli API v2 typically returns is_active as 1 or 0
-        const isActive = user.is_active === 1 || user.is_active === true;
+    await db.$transaction(
+        users.map(user => {
+            const isActive = user.is_active === 1 || user.is_active === true;
+            return db.user.upsert({
+                where: { id: user.user_id },
+                update: {
+                    username: user.username,
+                    email: user.email,
+                    thumb: user.user_thumb,
+                    isActive: isActive
+                },
+                create: {
+                    id: user.user_id,
+                    username: user.username,
+                    email: user.email,
+                    thumb: user.user_thumb,
+                    isActive: isActive
+                }
+            });
+        })
+    );
 
-        await db.user.upsert({
-            where: { id: user.user_id },
-            update: {
-                username: user.username,
-                email: user.email,
-                thumb: user.user_thumb,
-                isActive: isActive
-            },
-            create: {
-                id: user.user_id,
-                username: user.username,
-                email: user.email,
-                thumb: user.user_thumb,
-                isActive: isActive
-            }
-        });
-        syncedCount++;
-    }
-    return syncedCount;
+    return users.length;
 }
 
 export async function fetchHistory(
