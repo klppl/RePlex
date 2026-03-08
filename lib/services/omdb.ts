@@ -1,5 +1,6 @@
 import db from '../db';
 import { fetchMetadata } from './tautulli';
+import { extractUniqueItems } from './extract-unique-items';
 
 interface OmdbResponse {
     Title: string;
@@ -64,43 +65,7 @@ export async function syncOmdbData(onProgress?: (msg: string) => Promise<void>) 
     }
 
     // 1. Get unique Movies and TV Shows from History
-    const history = await db.watchHistory.findMany({
-        select: {
-            title: true,
-            year: true,
-            mediaType: true,
-            ratingKey: true,
-            grandparentTitle: true,
-            grandparentRatingKey: true
-        },
-        distinct: ['ratingKey', 'grandparentRatingKey']
-    });
-
-    // Manual filtering for unique items
-    const uniqueItems = new Map<string, { title: string, year?: number, type: 'movie' | 'series', ratingKey: string }>();
-
-    for (const entry of history) {
-        if (entry.mediaType === 'movie' && entry.ratingKey && entry.title) {
-            if (!uniqueItems.has(entry.ratingKey)) {
-                uniqueItems.set(entry.ratingKey, {
-                    title: entry.title,
-                    year: entry.year || undefined,
-                    type: 'movie',
-                    ratingKey: entry.ratingKey
-                });
-            }
-        } else if (entry.mediaType === 'episode' && entry.grandparentRatingKey && entry.grandparentTitle) {
-            // For episodes, we want the SHOW metadata (grandparent)
-            if (!uniqueItems.has(entry.grandparentRatingKey)) {
-                uniqueItems.set(entry.grandparentRatingKey, {
-                    title: entry.grandparentTitle,
-                    year: undefined, // Series year is tricky from episode, omitted for now
-                    type: 'series',
-                    ratingKey: entry.grandparentRatingKey
-                });
-            }
-        }
-    }
+    const uniqueItems = await extractUniqueItems();
 
     // 2. Filter out already cached items
     const existing = await db.mediaMetadata.findMany({

@@ -309,13 +309,12 @@ export async function saveSystemConfig(data: any) {
             rootPath: data.rootPath || ''
         };
 
-        if (existing) {
-            await db.tautulliConfig.update({ where: { id: existing.id }, data: configData });
-        } else {
-            // If creating new but sending mask, that's invalid, but UI shouldn't allow it.
-            if (configData.apiKey === MASK) throw new Error("Invalid API Key");
-            await db.tautulliConfig.create({ data: configData });
-        }
+        if (!existing && configData.apiKey === MASK) throw new Error("Invalid API Key");
+        await db.tautulliConfig.upsert({
+            where: { id: existing?.id ?? 0 },
+            update: configData,
+            create: configData,
+        });
 
         // 2. AI Config
         const existingAi = await db.aiConfig.findFirst();
@@ -327,11 +326,11 @@ export async function saveSystemConfig(data: any) {
             // default model for now
         };
 
-        if (existingAi) {
-            await db.aiConfig.update({ where: { id: existingAi.id }, data: aiData });
-        } else {
-            await db.aiConfig.create({ data: aiData });
-        }
+        await db.aiConfig.upsert({
+            where: { id: existingAi?.id ?? 0 },
+            update: aiData,
+            create: aiData,
+        });
 
         // 3. Media Config
         const existingMedia = await db.mediaConfig.findFirst();
@@ -342,11 +341,11 @@ export async function saveSystemConfig(data: any) {
             omdbApiKey: (data.omdbApiKey === MASK && existingMedia) ? existingMedia.omdbApiKey : (data.omdbApiKey || null),
         };
 
-        if (existingMedia) {
-            await db.mediaConfig.update({ where: { id: existingMedia.id }, data: mediaData });
-        } else {
-            await db.mediaConfig.create({ data: mediaData });
-        }
+        await db.mediaConfig.upsert({
+            where: { id: existingMedia?.id ?? 0 },
+            update: mediaData,
+            create: mediaData,
+        });
 
         // 4. App Config
         const existingApp = await db.appConfig.findFirst();
@@ -356,11 +355,11 @@ export async function saveSystemConfig(data: any) {
             yearSetupDay: parseInt(data.yearSetupDay as string) || 1,
         };
 
-        if (existingApp) {
-            await db.appConfig.update({ where: { id: existingApp.id }, data: appData });
-        } else {
-            await db.appConfig.create({ data: appData });
-        }
+        await db.appConfig.upsert({
+            where: { id: existingApp?.id ?? 0 },
+            update: appData,
+            create: appData,
+        });
 
         // 5. Admin User (if creating new)
         if (data.username && data.password) {
