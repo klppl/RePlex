@@ -1,51 +1,34 @@
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { verifyAdminSession } from '@/lib/auth-admin';
 import { syncGlobalHistory } from '@/lib/services/sync';
 import { syncUsers } from '@/lib/services/tautulli';
+import { createStreamingResponse } from '@/lib/utils/streaming';
 
 export const runtime = 'nodejs'; // Required for streaming? Or just standard. Nodejs is safer for Prisma.
 
 export async function GET(req: NextRequest) {
     const session = await verifyAdminSession(req);
     if (!session) {
-        return new NextResponse('Unauthorized', { status: 401 });
+        return new Response('Unauthorized', { status: 401 });
     }
 
-    const encoder = new TextEncoder();
+    return createStreamingResponse(async (send) => {
+        // Determine date range (current year)
+        const now = new Date();
+        const startOfYear = new Date(now.getFullYear(), 0, 1);
+        const endOfYear = new Date(now.getFullYear(), 11, 31);
 
-    const stream = new ReadableStream({
-        async start(controller) {
-            try {
-                // Determine date range (current year)
-                const now = new Date();
-                const startOfYear = new Date(now.getFullYear(), 0, 1);
-                const endOfYear = new Date(now.getFullYear(), 11, 31);
+        send(`[ADMIN] Starting global sync from ${startOfYear.toDateString()} to ${endOfYear.toDateString()}...`);
 
-                controller.enqueue(encoder.encode(`[ADMIN] Starting global sync from ${startOfYear.toDateString()} to ${endOfYear.toDateString()}...\n`));
+        send(`[ADMIN] Phase 0: Syncing Users...`);
+        const userCount = await syncUsers();
+        send(`[ADMIN] User Sync Complete. Found ${userCount} users.`);
 
-                controller.enqueue(encoder.encode(`[ADMIN] Phase 0: Syncing Users...\n`));
-                const userCount = await syncUsers();
-                controller.enqueue(encoder.encode(`[ADMIN] User Sync Complete. Found ${userCount} users.\n`));
+        const result = await syncGlobalHistory(startOfYear, endOfYear, (msg) => {
+            send(`[SYNC] ${msg}`);
+        });
 
-                const result = await syncGlobalHistory(startOfYear, endOfYear, (msg) => {
-                    controller.enqueue(encoder.encode(`[SYNC] ${msg}\n`));
-                });
-
-                controller.enqueue(encoder.encode(`[ADMIN] Sync Complete. Synced ${result.syncedDays} days, ${result.totalEntries} entries.\n`));
-                controller.close();
-            } catch (error: any) {
-                controller.enqueue(encoder.encode(`[ERROR] Sync failed: ${error.message}\n`));
-                controller.close();
-            }
-        }
-    });
-
-    return new NextResponse(stream, {
-        headers: {
-            'Content-Type': 'text/plain; charset=utf-8',
-            'Transfer-Encoding': 'chunked',
-            'X-Content-Type-Options': 'nosniff',
-        },
+        send(`[ADMIN] Sync Complete. Synced ${result.syncedDays} days, ${result.totalEntries} entries.`);
     });
 }

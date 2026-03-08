@@ -2,7 +2,8 @@
 
 import db from '../db';
 import { revalidatePath } from 'next/cache';
-import { hashPassword, verifyAdminSession, key as JWT_SECRET } from '../auth-admin';
+import { hashPassword, verifyAdminSession } from '../auth-admin';
+import { jwtKey as JWT_SECRET } from '../jwt-config';
 import { getStats } from '../services/stats';
 import { syncUsers } from '../services/tautulli';
 import { syncHistoryForUser, syncGlobalHistory } from '../services/sync';

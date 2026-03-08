@@ -1,24 +1,18 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
-
-const secret = process.env.JWT_SECRET;
-if (!secret && process.env.NODE_ENV === 'production') {
-    throw new Error("FATAL: JWT_SECRET is not defined. Check your environment variables.");
-}
-const SECRET_KEY = secret || 'super-secret-key-change-this';
-const key = new TextEncoder().encode(SECRET_KEY);
+import { jwtKey } from './jwt-config';
 
 export async function signSession(userId: number, username: string) {
     return new SignJWT({ userId, username })
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
         .setExpirationTime('30d') // Long session
-        .sign(key);
+        .sign(jwtKey);
 }
 
 export async function verifySession(token: string) {
     try {
-        const { payload } = await jwtVerify(token, key, { algorithms: ['HS256'] });
+        const { payload } = await jwtVerify(token, jwtKey, { algorithms: ['HS256'] });
         return payload as { userId: number; username: string };
     } catch (e) {
         return null;
