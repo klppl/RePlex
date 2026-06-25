@@ -27,22 +27,24 @@ export async function middleware(request: NextRequest) {
     }
 
     // 2. User Session Handling (for header injection)
+    // Always start from a clean header set: strip any client-supplied identity
+    // headers so they can never be spoofed by a request without a valid token.
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.delete('x-user-id');
+    requestHeaders.delete('x-username');
 
     const token = request.cookies.get('auth_token')?.value;
-
     if (token) {
         const session = await verifySession(token);
         if (session) {
-            const requestHeaders = new Headers(request.headers);
             requestHeaders.set('x-user-id', session.userId.toString());
             requestHeaders.set('x-username', session.username);
-            return NextResponse.next({
-                request: { headers: requestHeaders }
-            });
         }
     }
 
-    return NextResponse.next();
+    return NextResponse.next({
+        request: { headers: requestHeaders }
+    });
 }
 
 export const config = {

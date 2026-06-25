@@ -20,7 +20,6 @@ export async function syncHistoryForUser(
     const end = startOfDay(toDate);
 
     let syncedDays = 0;
-    let syncedCount = 0;
     let lastLoggedMonth = '';
     let totalEntries = 0;
 
@@ -207,7 +206,6 @@ export async function syncGlobalHistory(
     const totalDays = differenceInCalendarDays(end, start) + 1;
     let daysProcessed = 0;
     let lastProgress = 0;
-    const startTime = Date.now();
 
     // Fetch Active Users map
     const activeUsers = await db.user.findMany({ where: { isActive: true }, select: { id: true } });
