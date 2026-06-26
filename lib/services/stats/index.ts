@@ -12,6 +12,9 @@ import { computeLeaderboard } from './leaderboard';
 import { computeQuality } from './quality';
 import { generateAiSummary } from './ai-summary';
 import { computeValue } from './value';
+import { computeRewatchLeaderboard } from './rewatch';
+import { computeLibraryStats } from './library';
+import { computePopularity } from './popularity';
 
 export type { StatsResult } from './types';
 import type { StatsResult } from './types';
@@ -111,10 +114,13 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
 
     const anonymize = appConfig?.anonymizeLeaderboard ?? true;
 
-    const [comparison, qualityStats, { valueProposition, pirateBayValue }] = await Promise.all([
+    const [comparison, qualityStats, { valueProposition, pirateBayValue }, rewatchLeaderboard, libraryStats, globalPopularity] = await Promise.all([
         computeLeaderboard(userId, totalSeconds, startDate, endDate, anonymize),
         computeQuality(where, userId),
         computeValue(where, showSeconds),
+        computeRewatchLeaderboard(where),
+        computeLibraryStats(),
+        computePopularity(startDate, endDate),
     ]);
 
     // AI Summary (after other stats are computed, since it needs statsContext)
@@ -132,7 +138,8 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
             tech: { data: techStats.totalDataGB, transcodes: techStats.transcodePercent, platforms: techStats.topPlatforms },
             timeTraveler,
             longestBreak,
-            topShowByEpisodes
+            topShowByEpisodes,
+            mostRewatched: rewatchLeaderboard?.slice(0, 3)
         };
         aiSummary = await generateAiSummary(aiConfig, statsContext, options);
     }
@@ -162,6 +169,9 @@ export async function getStats(userId: number, year?: number, from?: Date, to?: 
         bingeRecord,
         techStats: { totalDataGB: techStats.totalDataGB, transcodePercent: techStats.transcodePercent, topPlatforms: techStats.topPlatforms },
         commitmentIssues,
+        rewatchLeaderboard,
+        libraryStats,
+        globalPopularity,
         aiSummary,
         valueProposition,
         pirateBayValue,

@@ -665,6 +665,58 @@ export default function DashboardClient({ initialStats, userId, year, shouldGene
                         </div>
                     )}
 
+                    {/* 10. COMMUNITY: Library size + most popular across all users */}
+                    {(stats.libraryStats || stats.globalPopularity) && (
+                        <div className="mt-8 space-y-8">
+                            {stats.libraryStats && (
+                                <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 flex flex-col sm:flex-row items-center justify-around gap-6 text-center">
+                                    <div>
+                                        <div className="text-5xl font-black text-white">{stats.libraryStats.movies.toLocaleString()}</div>
+                                        <div className="text-slate-400 uppercase tracking-widest text-xs font-bold mt-2">Movies 🎬</div>
+                                    </div>
+                                    <div className="hidden sm:block w-px h-12 bg-slate-700"></div>
+                                    <div>
+                                        <div className="text-5xl font-black text-white">{stats.libraryStats.shows.toLocaleString()}</div>
+                                        <div className="text-slate-400 uppercase tracking-widest text-xs font-bold mt-2">TV Series 📺</div>
+                                    </div>
+                                    <div className="hidden sm:block w-px h-12 bg-slate-700"></div>
+                                    <div>
+                                        <div className="text-5xl font-black text-white">{stats.libraryStats.episodes.toLocaleString()}</div>
+                                        <div className="text-slate-400 uppercase tracking-widest text-xs font-bold mt-2">Episodes ▶️</div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {stats.globalPopularity && (stats.globalPopularity.movies.length > 0 || stats.globalPopularity.shows.length > 0) && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    {([
+                                        { label: 'Most Popular Movies', emoji: '🍿', accent: 'text-amber-400', items: stats.globalPopularity.movies },
+                                        { label: 'Most Popular Series', emoji: '📺', accent: 'text-cyan-400', items: stats.globalPopularity.shows },
+                                    ] as const).map((col) => col.items.length > 0 && (
+                                        <div key={col.label} className="bg-slate-900 p-8 rounded-3xl border border-slate-800">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <h3 className={`${col.accent} uppercase tracking-widest text-sm font-bold`}>{col.label}</h3>
+                                                <div className="text-3xl opacity-50">{col.emoji}</div>
+                                            </div>
+                                            <p className="text-slate-400 text-sm mb-6 italic opacity-75">Ranked by how many of you watched them.</p>
+                                            <div className="space-y-3">
+                                                {col.items.map((item, i) => (
+                                                    <div key={i} className="flex items-center gap-3 text-sm border-b border-slate-800/50 pb-2 last:border-0 last:pb-0">
+                                                        <span className="text-slate-600 font-mono w-5 flex-shrink-0">{i + 1}</span>
+                                                        <span className="text-slate-200 font-medium truncate flex-1">{item.title}</span>
+                                                        <span className={`${col.accent} font-bold bg-slate-800/60 px-2 py-0.5 rounded text-xs whitespace-nowrap`}>
+                                                            {item.users} {item.users === 1 ? 'viewer' : 'viewers'}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                 </section>
 
                 {/* PERSONALITY & DEEP DIVE (Consolidated DNA) */}
@@ -1233,6 +1285,25 @@ export default function DashboardClient({ initialStats, userId, year, shouldGene
                                     <p className="text-lg font-bold text-white leading-tight">
                                         <span className="text-blue-400">{stats.topShowByEpisodes.count} episodes</span> of {stats.topShowByEpisodes.title}
                                     </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {stats.rewatchLeaderboard && stats.rewatchLeaderboard.length > 0 && (
+                            <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 hover:border-teal-500/50 transition">
+                                <div className="flex items-center justify-between mb-1">
+                                    <h3 className="text-teal-400 uppercase tracking-widest text-sm font-bold">Broken Record</h3>
+                                    <div className="text-3xl opacity-50">🔂</div>
+                                </div>
+                                <p className="text-slate-400 text-sm mb-6 italic opacity-75">The episodes you played on repeat.</p>
+                                <div className="space-y-3">
+                                    {stats.rewatchLeaderboard.map((item, i) => (
+                                        <div key={i} className="flex items-center gap-3 text-sm border-b border-slate-800/50 pb-2 last:border-0 last:pb-0">
+                                            <span className="text-slate-600 font-mono w-5 flex-shrink-0">{i + 1}</span>
+                                            <span className="text-slate-200 font-medium truncate flex-1">{item.title}</span>
+                                            <span className="text-teal-400 font-bold bg-teal-900/20 px-2 py-0.5 rounded text-xs whitespace-nowrap">{item.count}× plays</span>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         )}

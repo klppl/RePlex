@@ -159,6 +159,28 @@ export async function fetchHistory(
     return [];
 }
 
+export interface TautulliLibrary {
+    section_id: number;
+    section_name: string;
+    section_type: string; // 'movie', 'show', 'artist', 'photo'
+    count: number;
+    parent_count?: number; // e.g. seasons for a show library
+    child_count?: number;  // e.g. episodes for a show library
+    [key: string]: unknown;
+}
+
+export async function fetchLibraries(config: TautulliConfig): Promise<TautulliLibrary[]> {
+    const url = getTautulliUrl(config, 'get_libraries');
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to fetch libraries: ${res.statusText}`);
+
+    const json = await res.json() as TautulliResponse<TautulliLibrary[]>;
+    if (json.response.result !== 'success') {
+        throw new Error(`Tautulli API Error: ${json.response.message}`);
+    }
+    return Array.isArray(json.response.data) ? json.response.data : [];
+}
+
 export async function fetchMetadata(config: TautulliConfig, ratingKey: string): Promise<any> {
     const url = getTautulliUrl(config, 'get_metadata', { rating_key: ratingKey });
     try {

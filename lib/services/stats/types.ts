@@ -29,6 +29,12 @@ export interface StatsResult {
         topPlatforms: { platform: string; count: number }[];
     };
     commitmentIssues: { count: number; titles: string[] };
+    rewatchLeaderboard?: { title: string; show?: string; count: number }[];
+    libraryStats?: { movies: number; shows: number; episodes: number };
+    globalPopularity?: {
+        movies: { title: string; users: number; plays: number }[];
+        shows: { title: string; users: number; plays: number }[];
+    };
     aiSummary?: string;
     valueProposition?: number;
     pirateBayValue?: number;
